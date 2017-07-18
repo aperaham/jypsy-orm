@@ -71,6 +71,7 @@ function dropTables() {
  */
 function createTables() {
   let tableSQL = '';
+  // create tables in reverse order so that field constraints are valid
   for(let i = tables._tableOrder.length - 1; i > -1; i--) {
     const tableName = tables._tableOrder[i];
     tableSQL += tables[tableName];

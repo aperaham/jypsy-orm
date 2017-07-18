@@ -1,3 +1,7 @@
+/**
+ * a script that generates a new test database
+ */
+
 const TestDataBase = require('./testdb')
 
 const testDB = TestDataBase({
