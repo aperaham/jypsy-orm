@@ -25,14 +25,18 @@ module.exports.create = function(dbConfig) {
   pool.on('error', function (err, client) {
     console.error('idle client error', err.message, err.stack);
   });
-
 };
+
+
+module.exports.showQueryLog = true;
 
 
 module.exports.query = function (text, values, callback) {
   if(!pool) {
     throw Error(`pool does not exist! use 'create' first!`);
   }
-  console.log('query:', text, values);
+  if(module.exports.showQueryLog) {
+    console.log('query:', text, values);
+  }
   return pool.query(text, values, callback);
 };

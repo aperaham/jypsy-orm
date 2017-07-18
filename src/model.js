@@ -33,29 +33,40 @@ module.exports = models;
  * `validateModelFields`:
  * make sure `Field`s are provided for a given model and that they are the correct type.
  * also checks for the existence of a primary key.
+ * 
+ * deletes the fields from the opts and stores them separately.
  *   
  * @param {string} modelName 
  * @param {object} modelOpts 
+ * 
+ * @returns {object} new object containing fields
  */
-function validateModelFields(modelName, modelOpts) {
-	if(!modelOpts.fields) {
-		throw Error(`model fields not defined for DB Model: "${modelName}"`);
-	}
-
+function validateModelFields(modelName, opts) {
   function MDErr(msg) {
     return Error(`'${modelName}' DB Model Validation: ${msg}`);
   }
 
-	if(modelOpts.fields.constructor.name !== 'Object') {
-		throw MDErr(`'fields' property must be an object`);
-	}
+  const modelFields = {};
+  const optKeys = Object.keys(opts);
 
-	if(!Object.keys(modelOpts.fields).length) {
-		throw MDErr('no Fields provided');
-	}
+  for(let i = 0; i < optKeys.length; i++) {
+    let key = optKeys[i];
+    let optValue = opts[key];
+
+    if(!(optValue instanceof Fields.BaseField)) {
+      continue;
+    }
+
+    modelFields[key] = optValue;
+    delete opts[key];
+  }
+
+  if(Object.keys(modelFields).length == 0) {
+    throw MDErr(`model has no fields!`);
+  }
 
   let primaryKeys = 0;
-	let fields = modelOpts.fields; 
+	let fields = modelFields; 
 	for(let key in fields) {
 		let field = fields[key];
     // is it a registered `Field` class type?
@@ -81,6 +92,34 @@ function validateModelFields(modelName, modelOpts) {
   else if(primaryKeys > 1) {
     throw MDErr(`contains more than one primary key`);
   }
+
+  return modelFields;
+}
+
+/**
+ * if `model` props exists in a Model's class definition, make sure it's valid.
+ * deletes the props from the class and stores them separately.
+ * 
+ * @param {string} modelName 
+ * @param {object} modelProps 
+ * 
+ * @returns {object} formatted 'model' object (may have no properties)
+ */
+function validateModelProps(modelName, props) {
+  let modelProps = props.model;
+  if(!modelProps) return {};
+
+  if(typeof modelProps !== 'object') {
+		throw Error(`DB Model: "${modelName}" 'model' field must be object`);
+  }
+
+  if(modelProps.dbName && typeof modelProps.dbName !== 'string') {
+    throw Error(`dbName must be string for DB Model: "${modelName}"`);
+  }
+
+  const newProps = Object.assign({}, modelProps);
+  delete props.model;
+  return newProps;
 }
 
 
@@ -90,22 +129,23 @@ function validateModelFields(modelName, modelOpts) {
  * 
  * @param {string} modelName 
  * @param {object} opts 
+ * 
+ * @returns {object} formatted object: { fields: {x, y, z}, model: {a, b, c} }
  */
 function validateModelClass(modelName, opts) {
 	if(!modelName || typeof modelName !== 'string') {
 		throw Error(`model name not provided for DB Model`);
 	}
 
-	if(!opts.model) {
-		throw Error(`model definition not provided for DB Model: "${modelName}"`);
-	}
-
-  if(opts.model.dbName && typeof opts.model.dbName !== 'string') {
-    throw Error(`dbName must be string for DB Model: "${modelName}"`);
+  if(typeof opts !== 'object' || Object.keys(opts).length == 0) {
+    throw Error(`DB Model "${modelName}" does not have definition!`);
   }
 
-	validateModelFields(modelName, opts.model);
+  const modelProps = validateModelProps(modelName, opts);
+	const fieldProps = validateModelFields(modelName, opts);
+  return { model: modelProps, fields: fieldProps };
 } 
+
 
 function prepareModelMeta(modelClass, props) {
   const _meta = {
@@ -125,6 +165,7 @@ function prepareModelMeta(modelClass, props) {
   modelClass._meta = _meta;
   modelClass.prototype._meta = _meta;
 }
+
 
 function prepareModelFields(modelClass, props) {
   function MFError(msg) {
@@ -231,7 +272,7 @@ function isDerivedFrom(baseModel) {
  * @return {constructor} 
  */
 function extend(modelName, props = {}) {
-  validateModelClass(modelName, props);
+  const metaProps = validateModelClass(modelName, props);
 
 	let temp = {
 		[modelName]: function(opts) {
@@ -248,62 +289,45 @@ function extend(modelName, props = {}) {
   DBModel.__base__ = this;
   DBModel.isDerivedFrom = isDerivedFrom;
 
-  // "hidden" fields on the prototype
-  let modelProps = props.model;
-  delete props.model;
-
-
 	DBModel.prototype = Object.create(this.prototype);
 	Object.assign(DBModel.prototype, props);
 	DBModel.prototype.constructor = DBModel;
 
-  prepareModelMeta(DBModel, modelProps);
-  prepareModelFields(DBModel, modelProps);
+  prepareModelMeta(DBModel, metaProps);
+  prepareModelFields(DBModel, metaProps);
   setupORM(DBModel);
 	return DBModel;
 }
 
 
 models.Account = BaseModel.extend('Account', {
-	model: {
-		fields: {
-			id: Fields.AutoSerial({primaryKey: true, nullable: false}),
-			email: Fields.CIText({nullable: true, unique: true})
-		}
-	}
+  id: Fields.AutoSerial({primaryKey: true, nullable: false}),
+  email: Fields.CIText({nullable: true, unique: true})
 });
 
 
 models.Name = BaseModel.extend('Name', {
-	model: {
-		fields: {
-			id: Fields.AutoSerial({primaryKey: true, nullable: false}),
-			account: Fields.ForeignKey({model: models.Account, reverse: 'name'}),
-			first: Fields.Text({value: 'Awesome!'}),
-			last: Fields.Text({nullable: false}),
-		}
-	}
+  id: Fields.AutoSerial({primaryKey: true, nullable: false}),
+  account: Fields.ForeignKey({model: models.Account, reverse: 'name'}),
+  first: Fields.Text({value: 'Awesome!'}),
+  last: Fields.Text({nullable: false}),
 });
 
 
 models.Test = BaseModel.extend('Test', {
+  id: Fields.AutoSerial({primaryKey: true, nullable: false}),
+  account: Fields.ForeignKey({model: models.Account, nullable: false}),
+  name: Fields.Text({nullable: true}),
+  comment: Fields.Text({nullable: true}),
+
   model: {
-    fields: {
-      id: Fields.AutoSerial({primaryKey: true, nullable: false}),
-      account: Fields.ForeignKey({model: models.Account, nullable: false}),
-      name: Fields.Text({nullable: true}),
-      comment: Fields.Text({nullable: true})
-    }
+    dbName: 'test'
   }
 });
 
 
 models.Yo = models.Name.extend('Yo', {
-  model: {
-    fields: {
-      id: Fields.AutoSerial({primaryKey: true, nullable: false}),
-    }
-  }
+  id: Fields.AutoSerial({primaryKey: true, nullable: false})
 });
 
 

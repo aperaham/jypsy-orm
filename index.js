@@ -6,5 +6,5 @@ const fields = require('./src/fields');
 module.exports = {
   models,
   fields,
-  dbConnect: connect.create
+  dbConnect: connect
 };
