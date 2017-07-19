@@ -350,6 +350,20 @@ describe('General Field Validations', function() {
       }).to.throw(`'model' option is required`);
     });
 
+    it(`adds _id to the dbName of the field`, function() {
+      const Customer = getCustomerModel();
+      const field = fields.ForeignKey({model: Customer});
+      field.validateField('customer');
+      expect(field.options.dbName).to.equal('customer_id');
+    });
+
+    it(`adds reverse name equal to lower case DBModel name`, function() {
+      const Customer = getCustomerModel();
+      const field = fields.ForeignKey({model: Customer});
+      field.validateField('customer');
+      expect(field.options.reverse).to.equal('customer');
+    });
+
     it(`creates a ForeignKey field with a reference to the Customer model`, function() {
       expect(function(){
         const Customer = getCustomerModel();
