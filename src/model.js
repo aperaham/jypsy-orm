@@ -2,6 +2,18 @@ const query = require('./connect');
 const Fields = require('./fields');
 
 
+function ModelFieldValidationError(msg) {
+  if(!(this instanceof ModelFieldValidationError)) {
+    return new ModelFieldValidationError(msg);
+  }
+  this.message = msg;
+  this.name = 'ModelFieldValidationError';
+}
+
+ModelFieldValidationError.prototype = Object.create(Error.prototype);
+ModelFieldValidationError.prototype.constructor = ModelFieldValidationError;
+
+
 /**
  * `BaseModel`: 
  * constructor only provided to be inherited from when creating new classes.
@@ -43,7 +55,7 @@ module.exports = models;
  */
 function validateModelFields(modelName, opts) {
   function MDErr(msg) {
-    return Error(`'${modelName}' DB Model Validation: ${msg}`);
+    return ModelFieldValidationError(`'${modelName}' DB Model Validation: ${msg}`);
   }
 
   const modelFields = {};
@@ -69,17 +81,12 @@ function validateModelFields(modelName, opts) {
 	let fields = modelFields; 
 	for(let key in fields) {
 		let field = fields[key];
-    // is it a registered `Field` class type?
-		if(Fields[field.constructor.name] === undefined) {
-			throw MDErr(`'${key}' Field has unknown type: ${field.constructor.name}`);
-		}
-
     // validate all fields for a model Field
     try {
       field.validateField(key);
     }
     catch(err) {
-      throw MDErr(err.message);
+      throw MDErr('validateField error: ' + err.message);
     }
 
     // is primaryKey? should only have one total
@@ -110,14 +117,14 @@ function validateModelProps(modelName, props) {
   if(!modelProps) return {};
 
   if(typeof modelProps !== 'object') {
-		throw Error(`DB Model: "${modelName}" 'model' field must be object`);
+		throw Error(`DB Model: "${modelName}" 'model' property must be object`);
   }
 
   if(modelProps.dbName && typeof modelProps.dbName !== 'string') {
     throw Error(`dbName must be string for DB Model: "${modelName}"`);
   }
 
-  const newProps = Object.assign({}, modelProps);
+  const newProps = Object.create(modelProps);
   delete props.model;
   return newProps;
 }
@@ -331,10 +338,9 @@ models.Yo = models.Name.extend('Yo', {
 });
 
 
-/*
-Name.filter({first: "luke"}).req().next((result) => {
-	console.log(result);
-});
-*/
-
-module.exports = models;
+module.exports = {
+  models,
+  errors: {
+    ModelFieldValidationError
+  }
+};

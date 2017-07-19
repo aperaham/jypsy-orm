@@ -12,7 +12,7 @@ function TestDataBase(opts = {}) {
 }
 
 
-TestDataBase.prototype = events.prototype;
+TestDataBase.prototype = Object.create(events.prototype);
 TestDataBase.prototype.constructor = TestDataBase;
 TestDataBase.prototype._con = null;
 

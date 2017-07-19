@@ -1,10 +1,10 @@
 const connect = require('./src/connect'); 
-const models = require('./src/model');
+const model = require('./src/model');
 const fields = require('./src/fields');
 
 
 module.exports = {
-  models,
+  model,
   fields,
-  dbConnect: connect
+  connect
 };

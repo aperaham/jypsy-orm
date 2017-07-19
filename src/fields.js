@@ -217,7 +217,12 @@ Fields.Varchar = CreateField(BaseField, 'Varchar', {
     return `${this.field.sqlType}(${this.options.maxSize})`;
   },
   validateDefaultValue: function() {
-    if(!this.options.maxSize || typeof this.options.maxSize !== 'number') {
+    const valueType = typeof this.options.value;
+    if(valueType !== 'undefined' && valueType !== 'string') {
+      throw FieldError(this, 'default value must be undefined or string');
+    }
+
+    if(typeof this.options.maxSize !== 'number') {
       throw FieldError(this, 'maxSize required and must be an integer');
     }
     // should be an integer without decimal float point
@@ -329,9 +334,6 @@ Fields.ForeignKey = CreateField(Fields.BaseField, 'ForeignKey', {
     if(this.options.dbName === undefined) {
       this.options.dbName = fieldName + '_id';
     }
-    if(this.options.reverse === undefined) {
-      this.options.reverse = this.options.model.name.toLowerCase();
-    }
     BaseField.prototype.validateField.call(this, fieldName);
   },
   validateDefaults: function() {
@@ -340,11 +342,15 @@ Fields.ForeignKey = CreateField(Fields.BaseField, 'ForeignKey', {
       throw FieldError(this, `cannot be a primaryKey`);
     }
     if(typeof opts.model === 'undefined') {
-      throw FieldError(this, `'model' option is required and must be a string or a model class`);
+      throw FieldError(this, `'model' option is required and must be a DBModel class`);
     }
 
-    if(typeof opts.model !== 'string' && !opts.model.hasOwnProperty('isDerivedFrom')) {
-      throw FieldError(this, `'model' option is required and must be a string`);
+    if(typeof opts.model !== 'function' || !opts.model.hasOwnProperty('isDerivedFrom')) {
+      throw FieldError(this, `'model' option is required and must be a DBModel class`);
+    }
+
+    if(opts.reverse === undefined) {
+      opts.reverse = opts.model.name.toLowerCase();
     }
   }
 });

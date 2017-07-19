@@ -593,7 +593,6 @@ QuerySet.prototype.req = function() {
   }
 
   function successHandler(res) {
-    console.log(res);
     return Promise.resolve(res.rows);
   }
 
