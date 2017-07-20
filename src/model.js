@@ -53,9 +53,9 @@ module.exports = models;
  * 
  * @returns {object} new object containing fields
  */
-function validateModelFields(modelName, opts) {
+function validateModelFields(DBModel, opts) {
   function MDErr(msg) {
-    return ModelFieldValidationError(`'${modelName}' DB Model Validation: ${msg}`);
+    return ModelFieldValidationError(`'${DBModel.name}' DB Model Validation: ${msg}`);
   }
 
   const modelFields = {};
@@ -83,7 +83,7 @@ function validateModelFields(modelName, opts) {
 		let field = fields[key];
     // validate all fields for a model Field
     try {
-      field.validateField(key);
+      field.validateField(key, DBModel);
     }
     catch(err) {
       throw MDErr('validateField error: ' + err.message);
@@ -112,16 +112,16 @@ function validateModelFields(modelName, opts) {
  * 
  * @returns {object} formatted 'model' object (may have no properties)
  */
-function validateModelProps(modelName, props) {
+function validateModelProps(DBModel, props) {
   let modelProps = props.model;
   if(!modelProps) return {};
 
   if(typeof modelProps !== 'object') {
-		throw Error(`DB Model: "${modelName}" 'model' property must be object`);
+		throw Error(`DB Model: "${DBModel.name}" 'model' property must be object`);
   }
 
   if(modelProps.dbName && typeof modelProps.dbName !== 'string') {
-    throw Error(`dbName must be string for DB Model: "${modelName}"`);
+    throw Error(`dbName must be string for DB Model: "${DBModel.name}"`);
   }
 
   const newProps = Object.create(modelProps);
@@ -132,12 +132,11 @@ function validateModelProps(modelName, props) {
 
 /**
  * `validateModelClass`: 
- * validate the new Model's name and Fields.
+ * basic DBModel prop validation
  * 
  * @param {string} modelName 
  * @param {object} opts 
  * 
- * @returns {object} formatted object: { fields: {x, y, z}, model: {a, b, c} }
  */
 function validateModelClass(modelName, opts) {
 	if(!modelName || typeof modelName !== 'string') {
@@ -147,16 +146,13 @@ function validateModelClass(modelName, opts) {
   if(typeof opts !== 'object' || Object.keys(opts).length == 0) {
     throw Error(`DB Model "${modelName}" does not have definition!`);
   }
-
-  const modelProps = validateModelProps(modelName, opts);
-	const fieldProps = validateModelFields(modelName, opts);
-  return { model: modelProps, fields: fieldProps };
 } 
 
 
 function prepareModelMeta(modelClass, props) {
+  const model = props.model;
   const _meta = {
-    dbName: props.dbName === undefined ? modelClass.name.toLowerCase() : props.dbName,
+    dbName: model.dbName === undefined ? modelClass.name.toLowerCase() : model.dbName,
     _dbNameFields: {},
     _related: {},
   };
@@ -184,6 +180,8 @@ function prepareModelFields(modelClass, props) {
 
   for(let key in _fields) {
     const field = _fields[key]; 
+    field.initParentModel();
+
     if(field.options.dbName != field.fieldName) {
         _meta._dbNameFields[field.options.dbName] = field;
     }
@@ -196,7 +194,7 @@ function prepareModelFields(modelClass, props) {
         let relatedField = relatedModel._meta._related[reverseName];
         let msg = `reverse name '${reverseName}' `;
         msg += `already exists on model '${relatedModel.name}'`;
-        msg += ` (from ${relatedField.model.name} Model)`;
+        msg += ` (from ${relatedField.options.model.name} Model)`;
         MFError(msg);
       }
       
@@ -204,7 +202,7 @@ function prepareModelFields(modelClass, props) {
       const relatedField = Fields.RelatedField({
         model: modelClass, field: field, pk: _fields.id
       });
-      relatedField.validateField(reverseName);
+      relatedField.validateField(reverseName, modelClass);
       relatedModel._meta._related[reverseName] = relatedField;
     }
   }
@@ -279,7 +277,7 @@ function isDerivedFrom(baseModel) {
  * @return {constructor} 
  */
 function extend(modelName, props = {}) {
-  const metaProps = validateModelClass(modelName, props);
+  validateModelClass(modelName, props);
 
 	let temp = {
 		[modelName]: function(opts) {
@@ -296,9 +294,14 @@ function extend(modelName, props = {}) {
   DBModel.__base__ = this;
   DBModel.isDerivedFrom = isDerivedFrom;
 
+  const modelProps = validateModelProps(DBModel, props);
+	const fieldProps = validateModelFields(DBModel, props);
+  const metaProps = { model: modelProps, fields: fieldProps };
+
 	DBModel.prototype = Object.create(this.prototype);
 	Object.assign(DBModel.prototype, props);
 	DBModel.prototype.constructor = DBModel;
+
 
   prepareModelMeta(DBModel, metaProps);
   prepareModelFields(DBModel, metaProps);

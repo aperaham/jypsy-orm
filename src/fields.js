@@ -136,19 +136,35 @@ BaseField.prototype.construct = function(opts) {
  * 
  * @param {string} (required) the name of the field passed from the model
  */
-BaseField.prototype.validateField = function(fieldName) {
+BaseField.prototype.validateField = function(fieldName, parentModel) {
   this.fieldName = fieldName;
   
   if(this.options.dbName === undefined) {
     this.options.dbName = fieldName;
   }
 
+  if(typeof parentModel !== 'function' || !parentModel.hasOwnProperty('isDerivedFrom')) {
+    throw FieldError(this, 'parent model not DBModel');
+  }
+  this.parentModel = parentModel;
+
   // validate here
   if(typeof this.options !== 'object') {
     throw FieldError(this, 'options must be an object!');
   }
+
   this.parseDefaultOptions();
 };
+
+
+/**
+ * function is called by the DBModel's setup phase.
+ * do whatever a field want's to do with it.
+ * the function is called at a later time when the DBModel is nearly configured.
+ */
+BaseField.prototype.initParentModel = function() {
+
+}
 
 
 /**
@@ -317,6 +333,21 @@ Fields.BigInt = CreateField(Fields.SmallInt, 'BigInt', {
 });
 
 
+Fields.Boolean = CreateField(BaseField, 'Boolean', {
+  field: {
+    sqlType: 'boolean'
+  },
+  validateDefaultValue: function() {
+    if(this.options.value === undefined) {
+      return;
+    }
+    if(typeof this.options.value !== 'boolean') {
+      throw FieldError(this, 'default value must be a boolean');
+    }
+  }  
+});
+
+
 Fields.ForeignKey = CreateField(Fields.BaseField, 'ForeignKey', {
   defaults: {
     nullable: true,
@@ -330,11 +361,11 @@ Fields.ForeignKey = CreateField(Fields.BaseField, 'ForeignKey', {
   typeToSQL: function() {
     return `bigint REFERENCES ${this.options.model._meta.dbName}`;
   },
-  validateField: function(fieldName) {
+  validateField: function(fieldName, parentModel) {
     if(this.options.dbName === undefined) {
       this.options.dbName = fieldName + '_id';
     }
-    BaseField.prototype.validateField.call(this, fieldName);
+    BaseField.prototype.validateField.call(this, fieldName, parentModel);
   },
   validateDefaults: function() {
     let opts = this.options;
@@ -349,8 +380,13 @@ Fields.ForeignKey = CreateField(Fields.BaseField, 'ForeignKey', {
       throw FieldError(this, `'model' option is required and must be a DBModel class`);
     }
 
-    if(opts.reverse === undefined) {
-      opts.reverse = opts.model.name.toLowerCase();
+    if(typeof opts.reverse !== 'undefined' && typeof opts.reverse !== 'string') {
+      throw FieldError(this, `reverse name must be string or undefined`);
+    }
+  },
+  initParentModel: function() {
+    if(!this.options.reverse) {
+      this.options.reverse = this.parentModel._meta.dbName;
     }
   }
 });
@@ -361,7 +397,7 @@ Fields.RelatedField = CreateField(Fields.ForeignKey, 'RelatedField', {
     throw FieldError(this, `field not for SQL purposes`);
   },
   validateDefaults: function() {
-    Fields.ForeignKey.prototype.validateDefaults.call(this);
+    //Fields.ForeignKey.prototype.validateDefaults.call(this);
     const opts = this.options;
     if(!opts.field) {
       throw FieldError(this, 'requires Field');
