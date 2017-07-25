@@ -1,8 +1,7 @@
 /**
  * a script that generates a new test database
  */
-
-const TestDataBase = require('./testdb')
+const TestDataBase = require('../tests/testdb');
 
 const testDB = TestDataBase({
   database: 'jypsy_orm_test_database', 

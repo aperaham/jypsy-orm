@@ -1,7 +1,9 @@
 const pg = require('pg');
 
 
-let pool = null;
+let pool = null ;
+let showQueryLog = false;
+
 
 /**
 * dbConfig:
@@ -28,15 +30,18 @@ module.exports.create = function(dbConfig) {
 };
 
 
-module.exports.showQueryLog = true;
+module.exports.showQueryLog = function(show) {
+  if(typeof show !== 'boolean') return;
+  showQueryLog = show;
+};
 
 
 module.exports.query = function (text, values, callback) {
   if(!pool) {
     throw Error(`pool does not exist! use 'create' first!`);
   }
-  if(module.exports.showQueryLog) {
-    console.log('query:', text, values);
+  if(showQueryLog) {
+    console.log('SQL: ', text, values);
   }
   return pool.query(text, values, callback);
 };

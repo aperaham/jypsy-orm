@@ -454,6 +454,9 @@ QuerySet.prototype.not = function(fields = {}) {
 
 
 QuerySet.prototype.delete = function() {
+  if(arguments.length) {
+    throw QSError(this, `delete does not take parameters`);
+  }
   const clone = this._clone();
 
   if(clone._qType != null && clone._qType != QueryType.VALUES_LIST) {

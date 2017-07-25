@@ -2,18 +2,6 @@ const query = require('./connect');
 const Fields = require('./fields');
 
 
-function ModelFieldValidationError(msg) {
-  if(!(this instanceof ModelFieldValidationError)) {
-    return new ModelFieldValidationError(msg);
-  }
-  this.message = msg;
-  this.name = 'ModelFieldValidationError';
-}
-
-ModelFieldValidationError.prototype = Object.create(Error.prototype);
-ModelFieldValidationError.prototype.constructor = ModelFieldValidationError;
-
-
 /**
  * `BaseModel`: 
  * constructor only provided to be inherited from when creating new classes.
@@ -55,7 +43,7 @@ module.exports = models;
  */
 function validateModelFields(DBModel, opts) {
   function MDErr(msg) {
-    return ModelFieldValidationError(`'${DBModel.name}' DB Model Validation: ${msg}`);
+    return Error(`'${DBModel.name}' DB Model Validation: ${msg}`);
   }
 
   const modelFields = {};
@@ -342,8 +330,5 @@ models.Yo = models.Name.extend('Yo', {
 
 
 module.exports = {
-  models,
-  errors: {
-    ModelFieldValidationError
-  }
+  models
 };

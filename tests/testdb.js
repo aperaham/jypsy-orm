@@ -91,6 +91,7 @@ function closeConnection() {
 }
 
 
+
 tables.customer = `
   create table customer (
     id bigserial PRIMARY KEY NOT NULL,
@@ -144,11 +145,14 @@ tables._tableOrder = [
 tables._data = {};
 tables._data.customer = [
   { id: 1, first: 'Willard J', last: 'Willard' },
-  { id: 2, first: 'LewAnn', last: 'Wilky' },
+  { id: 2, first: 'Apple B', last: 'Saucey' },
   { id: 3, first: 'Steve', last: 'Brule' },
   { id: 4, first: 'Pablo', last: 'Meyers' },
   { id: 5, first: 'Steve', last: 'Jonson' }
 ];
 
 
-module.exports = TestDataBase;
+module.exports = {
+  TestDataBase,
+  tables
+};
