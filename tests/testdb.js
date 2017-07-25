@@ -3,6 +3,7 @@ const events = require('events');
 
 const tables = {};
 
+
 function TestDataBase(opts = {}) {
   if(!(this instanceof TestDataBase)) {
     return new TestDataBase(opts);
@@ -15,6 +16,37 @@ function TestDataBase(opts = {}) {
 TestDataBase.prototype = Object.create(events.prototype);
 TestDataBase.prototype.constructor = TestDataBase;
 TestDataBase.prototype._con = null;
+
+
+/**
+ * return sql
+ * @param {Array} data Array of objects describing the data to insert
+ * @param {String} tableName the name of the table to generate sql for
+ *   
+ * @returns {object} SQL and values
+ */
+function insertSQL(data, tableName) {
+  const keys = Object.keys(data[0]);
+  let values = []; 
+  let insertParams = [];
+
+  let paramCount = 0;
+  for(let i = 0; i < data.length; i++) {
+    values = values.concat(keys.map(k => data[i][k]));
+    const params = keys.map((k, kIndex) => `$${(++paramCount)}`);
+    insertParams.push(`(${params.join(', ')})`);
+  }
+
+  let query = `INSERT INTO ${tableName} (${keys.join(', ')}) `;
+  query += `VALUES ${insertParams.join(', ')}`;
+  return { SQL: query, values: values };
+};
+
+
+TestDataBase.prototype.populateCustomers = function() {
+  const result = insertSQL(tables._data.customer, 'customer');
+  return this._con.query(result.SQL, result.values);
+};
 
 
 /**
@@ -40,7 +72,6 @@ function onConnect(err) {
   this.emit('dbConnected', this._con);
   let promise = dropTables.call(this);
   promise = promise.then(createTables.bind(this));
-  promise = promise.then(closeConnection.bind(this));
   promise.catch(err => {
     this.emit('error', err);
   }); 
@@ -78,7 +109,7 @@ function createTables() {
   }
 
   return this._con.query(tableSQL).then(() => {
-    this.emit(`tablesCreated`, null);
+    this.emit(`tablesCreated`, this);
   });
 }
 
@@ -89,7 +120,6 @@ function closeConnection() {
     this.emit('dbClosed', null);
   });
 }
-
 
 
 tables.customer = `
@@ -144,11 +174,11 @@ tables._tableOrder = [
 
 tables._data = {};
 tables._data.customer = [
-  { id: 1, first: 'Willard J', last: 'Willard' },
-  { id: 2, first: 'Apple B', last: 'Saucey' },
-  { id: 3, first: 'Steve', last: 'Brule' },
-  { id: 4, first: 'Pablo', last: 'Meyers' },
-  { id: 5, first: 'Steve', last: 'Jonson' }
+  { id: '1', first: 'Willard J', last: 'Willard' },
+  { id: '2', first: 'Apple B', last: 'Saucey' },
+  { id: '3', first: 'Steve', last: 'Brule' },
+  { id: '4', first: 'Pablo', last: 'Meyers' },
+  { id: '5', first: 'Steve', last: 'Jonson' }
 ];
 
 

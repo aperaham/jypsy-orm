@@ -17,6 +17,7 @@ utils.getCustomerModel = function() {
   });
 };
 
+
 utils.getOrderModel = function(CustomerClass) {
   return models.BaseModel.extend('Order', {
     id: fields.AutoSerial({primaryKey: true, nullable: false}),
@@ -60,11 +61,11 @@ utils.getItemTopping = function(ItemClass, ToppingClass, OrderClass) {
 
 
 utils.getRelatedModels = function() {
-  const Customer = getCustomerModel();
-  const Order = getOrderModel(Customer);
-  const Item = getItemModel();
-  const Topping = getToppingModel();
-  const ItemTopping = getItemTopping(Item, Topping, Order);
+  const Customer = utils.getCustomerModel();
+  const Order = utils.getOrderModel(Customer);
+  const Item = utils.getItemModel();
+  const Topping = utils.getToppingModel();
+  const ItemTopping = utils.getItemTopping(Item, Topping, Order);
   return { Customer, Order,  Item, Topping, ItemTopping };
 };
 
@@ -83,13 +84,21 @@ utils.createORMConnection = function() {
 
 utils.createTestDB = function(done) {
   const testdb = TestDataBase(utils.testDBConfig);
-  testdb.on('dbClosed', function(){
-    done();
+  let promise = new Promise((res, rej) => {
+    testdb.on('tablesCreated', function(db){
+      res(db);
+    });
+    testdb.on('error', function(err) {
+      rej();
+    });
   });
-  testdb.on('error', function(err) {
-    done(err);
-  });
+  return promise;
 };
+
+
+utils.populateCustomers = function() {
+
+}
 
 
 

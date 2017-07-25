@@ -1,4 +1,5 @@
 const expect = require('chai').expect;
+const tables = require('./testdb').tables;
 const testUtils = require('./util');
 
 const createTestDB = testUtils.createTestDB;
@@ -10,6 +11,24 @@ testUtils.createORMConnection();
 
 
 describe('QuerySet', function() {
+  before(function(done) {
+    createTestDB().then(result => {
+      result.populateCustomers();
+      done();
+    });
+  });
+
+  describe(`valuesList`, function() {
+    it('retrieves all customers', function(done) {
+      const Customer = getCustomerModel();
+      Customer.orm.req().then(result => {
+        exp = expect(result).to.have.lengthOf(tables._data.customer.length);
+        exp = exp.and.to.deep.include.members(tables._data.customer);
+        done();
+      });
+
+    });
+  }); /* valuesList */
 
   describe('Query Types', function() {
     it(`throws on valuesList where fields don't exist in model or its relations`, function() {
@@ -47,10 +66,12 @@ describe('QuerySet', function() {
       }).not.to.throw(`doesn't exist`);
     });   
 
-  });
+  }); /* Query Types */
 
   describe('Queries', function() {
-    before(createTestDB);
+    before(function(done) {
+      createTestDB().then(() => done());
+    });
 
     it('inserts a "customer" row', function(done) {
       const Customer = getCustomerModel();
@@ -116,5 +137,5 @@ describe('QuerySet', function() {
       }));
     });
 
-  });
+  }); /* Queries */
 });
