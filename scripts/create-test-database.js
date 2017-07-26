@@ -1,7 +1,8 @@
 /**
  * a script that generates a new test database
  */
-const TestDataBase = require('../tests/testdb');
+const populate_tables = process.argv.indexOf('--populate-tables') == -1 ? false : true;
+const TestDataBase = require('../tests/testdb').TestDataBase;
 
 const testDB = TestDataBase({
   database: 'jypsy_orm_test_database', 
@@ -22,10 +23,28 @@ testDB.on('droppedTables', function() {
   console.log('tables dropped');
 });
 
-testDB.on('tablesCreated', function() {
-  console.log('tables created');
+testDB.on('tableCreated', function(result) {
+  console.log(`created table ${result.name}`);
 });
 
-testDB.on('dbClosed', function(connection) {
-  console.log('disconnected from database');
+testDB.on('tablesCreated', function() {
+  console.log('done');
+  if(!populate_tables) process.exit();
+
+  console.log('populating tables...');
+  testDB.populateAllTables().catch(err => {
+    console.log(err);
+    process.exit();
+  });
 });
+
+if(populate_tables) {
+  testDB.on('tablePopulated', function(result) {
+    console.log(`populated ${result.name}`);
+  });
+
+  testDB.on('tablesPopulated', function() {
+    console.log('done');
+    process.exit();
+  });
+}

@@ -12,7 +12,9 @@ testUtils.createORMConnection();
 
 describe('QuerySet', function() {
   before(function(done) {
+    // drop test db tables and recreate
     createTestDB().then(result => {
+      // add data to the customers table
       result.populateCustomers();
       done();
     });
@@ -26,8 +28,23 @@ describe('QuerySet', function() {
         exp = exp.and.to.deep.include.members(tables._data.customer);
         done();
       });
-
     });
+
+    it(`retrieves customer 'first' and 'last' columns`, function(done) {
+      // get only first and last from columns
+      let proofData = tables._data.customer.map(cust => {
+        return { first: cust.first, last: cust.last };
+      });
+
+      const Customer = getCustomerModel();
+      Customer.orm.valuesList('first', 'last').req().then(result => {
+        exp = expect(result).to.have.lengthOf(tables._data.customer.length);
+        exp = exp.and.to.deep.include.members(proofData);
+        done();
+      });
+    });
+
+    it('')
   }); /* valuesList */
 
   describe('Query Types', function() {
