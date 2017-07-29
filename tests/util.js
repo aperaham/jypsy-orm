@@ -46,12 +46,24 @@ utils.getToppingModel = function() {
 };
 
 
-utils.getItemTopping = function(ItemClass, ToppingClass, OrderClass) {
+utils.getOrderItemModel = function(OrderClass, ItemClass) {
+  return models.BaseModel.extend('OrderItem', {
+    id: fields.AutoSerial({primaryKey: true, nullable: false}),
+    order: fields.ForeignKey({model: OrderClass, nullable: false}),
+    item: fields.ForeignKey({model: ItemClass, nullable: false}),
+
+    model: {
+      dbModel: 'order_item'
+    }
+  });
+};
+
+
+utils.getItemTopping = function(OrderItemClass, ToppingClass) {
   return models.BaseModel.extend('ItemTopping', {
     id: fields.AutoSerial({primaryKey: true, nullable: false}),
-    item: fields.ForeignKey({model: ItemClass, nullable: false}),
-    item_topping: fields.ForeignKey({model: ToppingClass}),
-    order: fields.ForeignKey({model: OrderClass, nullable: false}),
+    order_item: fields.ForeignKey({model: OrderItemClass, nullable: false}),
+    topping: fields.ForeignKey({model: ToppingClass}),
 
     model: {
       dbName: 'item_topping'
@@ -65,8 +77,9 @@ utils.getRelatedModels = function() {
   const Order = utils.getOrderModel(Customer);
   const Item = utils.getItemModel();
   const Topping = utils.getToppingModel();
-  const ItemTopping = utils.getItemTopping(Item, Topping, Order);
-  return { Customer, Order,  Item, Topping, ItemTopping };
+  const OrderItem = utils.getOrderItemModel(Order, Item);
+  const ItemTopping = utils.getItemTopping(OrderItem, Topping);
+  return { Customer, Order,  Item, Topping, OrderItem, ItemTopping };
 };
 
 
@@ -94,12 +107,6 @@ utils.createTestDB = function(done) {
   });
   return promise;
 };
-
-
-utils.populateCustomers = function() {
-
-}
-
 
 
 module.exports = utils;
