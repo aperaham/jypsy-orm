@@ -53,7 +53,7 @@ utils.getOrderItemModel = function(OrderClass, ItemClass) {
     item: fields.ForeignKey({model: ItemClass, nullable: false}),
 
     model: {
-      dbModel: 'order_item'
+      dbName: 'order_item'
     }
   });
 };

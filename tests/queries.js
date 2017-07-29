@@ -56,7 +56,7 @@ describe('QuerySet', function() {
       const query = Customer.orm.valuesList('order.id');
       return promise = query.req().then(result => {
         let exp = expect(result).to.have.lengthOf(proofData.length);
-        exp = exp.and.to.depp.include.members(proofData);
+        exp = exp.and.to.deep.include.members(proofData);
       });
     });
 
@@ -70,7 +70,7 @@ describe('QuerySet', function() {
     it(`throws where field doesn't exist in join. lists possible fields`, function() {
       const { Item } = getRelatedModels();
       expect(function() {
-        Item.orm.valuesList('is_pizza', 'orderitem.order.customer.doesnt_exist');
+        Item.orm.valuesList('is_pizza', 'order_item.order.customer.doesnt_exist');
       }).to.throw(`field 'doesnt_exist' doesn't exist in Customer model. choices are: id, first, last, order`);
     });
 
@@ -102,7 +102,7 @@ describe('QuerySet', function() {
 
         return ormQuery.req().then(result => {
           let exp = expect(result).to.have.lengthOf(proofData.length);
-          exp = exp.and.to.depp.include.members(proofData);
+          exp = exp.and.to.deep.include.members(proofData);
         });
       });
     });
@@ -122,12 +122,12 @@ describe('QuerySet', function() {
         const proofData = proof.rows;
         let ormQuery;
         expect(function() {
-          ormQuery = Customer.orm.valuesList('order.orderitem.item.name');
+          ormQuery = Customer.orm.valuesList('order.order_item.item.name');
         }).not.to.throw(`doesn't exist`);
 
         return ormQuery.req().then(result => {
           let exp = expect(result).to.have.lengthOf(proofData.length);
-          exp = exp.and.to.depp.include.members(proofData);
+          exp = exp.and.to.deep.include.members(proofData);
         });
       });
     });   
@@ -175,6 +175,35 @@ describe('QuerySet', function() {
         expect(result).to.have.lengthOf(1).and.to.deep.include(proofData);
       });
     });
+
+    it('subqueries all order_items from a customer: order_item(order(customer))', function() {
+      const { Customer, Order, OrderItem } = getRelatedModels();
+      const customer = tables._data.customer[0];
+
+      const proofQuerySQL = `
+        SELECT order_item.*
+        FROM order_item
+        WHERE order_id IN (
+            SELECT id FROM "order" as ord
+            WHERE customer_id IN (
+                SELECT id from customer
+                WHERE id = $1
+            )
+        );`
+      let proofData; 
+      let promise = _query(proofQuerySQL, [customer.id]).then(result => {
+        proofData = result.rows;
+      });
+      
+      let customerQuery = Customer.orm.filter({id: customer.id}).valuesList('id');
+      let orderQuery = Order.orm.filter({customer: customerQuery}).valuesList('id');
+      let orderItemQuery = OrderItem.orm.filter({order: orderQuery});
+
+      return promise = promise.then(() => orderItemQuery.req().then(result => {
+        let exp = expect(result).to.have.lengthOf(proofData.length)
+        exp = exp.and.to.deep.include.members(proofData);
+      }));
+    });
   });
 
   describe('delete', function() {
@@ -183,7 +212,7 @@ describe('QuerySet', function() {
 
       let queryEmpty = Customer.orm.filter({first: 'Knot', last: 'Exists'});
       return queryEmpty.delete().req().then(result => {
-        expect(result).to.have.lengthOf(0);
+        expect(result).to.equal(0);
       });
     });
 
@@ -194,7 +223,7 @@ describe('QuerySet', function() {
       let query = Customer.orm.filter({id: proofData.id}).delete().req();
       query = query.then(result => {
         // results should return number of deleted items
-        expect(result).to.have.lengthOf(1);
+        expect(result).to.equal(1)
       });
 
       let customer = Customer.orm.filter({id: proofData.id});

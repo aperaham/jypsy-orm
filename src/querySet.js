@@ -390,7 +390,7 @@ function generateSQL(values = [], subQueryDepth = 0) {
   switch(this._qType) {
     case null:
     case QueryType.VALUES_LIST:
-      queryTypeSQL = `SELECT ${selectFields} FROM ${tableName}`;
+      queryTypeSQL = `SELECT ${selectFields} FROM "${tableName}"`;
       orderBy = getOrderFields.call(this);
       break;
 
@@ -597,6 +597,26 @@ QuerySet.prototype._querySQL = function() {
 
 
 /**
+ * `reqHandler`:
+ * for each QueryType, return QuerySet query data in a way that is consistent with 
+ * the query type
+ */
+const reqHandler = {};
+
+reqHandler[QueryType.DELETE] = function(res) {
+  return Promise.resolve(res.rowCount);
+};
+
+reqHandler[QueryType.VALUES_LIST] = function(res) {
+  return Promise.resolve(res.rows);
+};
+
+function reqError(err) {
+  return Promise.reject(err);
+};
+
+
+/**
  * `req`:
  *  short for 'request':
  * run the query returning a promise
@@ -604,16 +624,9 @@ QuerySet.prototype._querySQL = function() {
 QuerySet.prototype.req = function() {
   const query = generateSQL.call(this);
   let promise = _query.query(query.SQL, query.values);
-  
-  function errHandler(err) {
-    return Promise.reject(err);
-  }
 
-  function successHandler(res) {
-    return Promise.resolve(res.rows);
-  }
-
-  return promise.then(successHandler, errHandler);
+  const qType = this._qType !== null ? this._qType : QueryType.VALUES_LIST;  
+  return promise.then(reqHandler[qType], reqError);
 }
 
 
