@@ -19,9 +19,11 @@ utils.getCustomerModel = function() {
 
 
 utils.getOrderModel = function(CustomerClass) {
+  const onDel = fields.ForeignKey.onDelete;
+
   return models.BaseModel.extend('Order', {
     id: fields.AutoSerial({primaryKey: true, nullable: false}),
-    customer: fields.ForeignKey({model: CustomerClass, nullable: false}),
+    customer: fields.ForeignKey({model: CustomerClass, onDelete: onDel.SET_NULL}),
     is_paid: fields.Boolean({value: false, nullable: false})
   });
 };

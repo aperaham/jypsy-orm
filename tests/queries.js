@@ -231,5 +231,26 @@ describe('QuerySet', function() {
         expect(result).lengthOf(0);
       }));
     });
+
+    it(`deletes all rows in the customer table`, function() {
+      const Customer = getCustomerModel();
+      
+      let CustomerCount;
+      let query = Customer.orm.req().then(result => {
+        // 1.) get number of customers
+        CustomerCount = result.length;
+      });
+
+      const delQuery = Customer.orm.delete();
+      query = query.then(() => delQuery.req().then(deleted => {
+        // 2.) delete customer 
+        expect(deleted).to.equal(CustomerCount);        
+      }));
+
+      return query.then(() => Customer.orm.req().then(result => {
+        // 3.) make sure customers have been deleted
+        expect(result).to.have.lengthOf(0);
+      }));
+    });
   });
 });

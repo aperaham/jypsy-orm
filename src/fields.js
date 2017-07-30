@@ -348,6 +348,14 @@ Fields.Boolean = CreateField(BaseField, 'Boolean', {
 });
 
 
+const onDelete = {
+  SET_NULL: 'SET NULL',
+  SET_DEFAULT: 'SET DEFAULT',
+  CASCADE: 'CASCADE',
+  RESTRICT: 'RESTRICT',
+  NO_ACTION: 'NO ACTION'
+};
+
 Fields.ForeignKey = CreateField(Fields.BaseField, 'ForeignKey', {
   defaults: {
     nullable: true,
@@ -357,9 +365,14 @@ Fields.ForeignKey = CreateField(Fields.BaseField, 'ForeignKey', {
     model: undefined,
     // reverse: the 'reverse' relation name
     reverse: undefined,
+    onDelete: undefined
   },
   typeToSQL: function() {
-    return `bigint REFERENCES ${this.options.model._meta.dbName}`;
+    let typeSQL = `bigint REFERENCES ${this.options.model._meta.dbName}`;
+    if(this.options.onDelete) {
+      typeSQL += ` ON DELETE ${this.options.onDelete}`;
+    }
+    return typeSQL;
   },
   validateField: function(fieldName, parentModel) {
     if(this.options.dbName === undefined) {
@@ -383,6 +396,14 @@ Fields.ForeignKey = CreateField(Fields.BaseField, 'ForeignKey', {
     if(typeof opts.reverse !== 'undefined' && typeof opts.reverse !== 'string') {
       throw FieldError(this, `reverse name must be string or undefined`);
     }
+    
+    if(typeof opts.onDelete !== 'undefined') {
+      let choices = Object.keys(onDelete).map(i => onDelete[i]);
+      if(choices.indexOf(opts.onDelete) == -1) {
+        choices = choices.join(', ');
+        throw FieldError(this, `invalid onDelete value '${onDelete}'. choices are: ${choices}`);
+      }
+    }
   },
   initParentModel: function() {
     if(!this.options.reverse) {
@@ -390,6 +411,7 @@ Fields.ForeignKey = CreateField(Fields.BaseField, 'ForeignKey', {
     }
   }
 });
+Fields.ForeignKey.onDelete = onDelete;
 
 
 Fields.RelatedField = CreateField(Fields.ForeignKey, 'RelatedField', {

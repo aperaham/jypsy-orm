@@ -192,7 +192,7 @@ tables.customer = `
 tables.order = `
   create table "order" (
     id bigserial PRIMARY KEY NOT NULL,
-    customer_id bigint REFERENCES customer NOT NULL,
+    customer_id bigint REFERENCES customer ON DELETE SET NULL,
     is_paid boolean NOT NULL
   );`;
 

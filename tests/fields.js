@@ -6,7 +6,6 @@ const fields = jypsyORM.fields;
 const getCustomerModel = testUtils.getCustomerModel;
 
 
-
 describe('General Field Validations', function() {
   describe('Varchar Field', function() {
     it(`name is 'Varchar'`, function() {
@@ -270,6 +269,15 @@ describe('General Field Validations', function() {
       }).to.throw(`'model' option is required`);
     });
 
+    it(`throws for having invalid 'onDelete' value`, function() {
+      expect(function(){
+        const Customer = getCustomerModel();
+        const onDelete = fields.ForeignKey.onDelete;
+        const field = fields.ForeignKey({model: Customer, onDelete: 'not an option'});
+        field.validateField('fk', Customer);
+      }).to.throw(`invalid onDelete value`);
+    });
+
     it(`adds _id to the dbName of the field`, function() {
       const Customer = getCustomerModel();
       const Test = models.BaseModel.extend('Test', {
@@ -292,15 +300,17 @@ describe('General Field Validations', function() {
     });
 
     it(`creates a ForeignKey field with a reference to the Customer model`, function() {
-      expect(function(){
-        const Customer = getCustomerModel();
-        const Test = models.BaseModel.extend('Test', {
-          id: fields.AutoSerial({primaryKey: true, nullable: false}),
-        });
-        const field = fields.ForeignKey({model: Customer});
-        field.validateField('fk', Test);
-        field.initParentModel();
-      }).not.to.throw();
+      const Customer = getCustomerModel();
+
+      const onDel = fields.ForeignKey.onDelete;
+      const Test = models.BaseModel.extend('Test', {
+        id: fields.AutoSerial({primaryKey: true, nullable: false}),
+        fk: fields.ForeignKey({model: Customer, onDelete: onDel.SET_NULL, nullable: false})
+      });
+
+      let testField = Test._meta.getFieldByName('fk');
+      let sql = 'fk_id bigint REFERENCES customer ON DELETE SET NULL NOT NULL';
+      expect(testField.toTableSQL()).to.equal(sql);
     });
 
   }); /* describe ForeignKey */
