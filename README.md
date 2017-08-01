@@ -185,7 +185,7 @@ const fields = jypsy.fields;
 
 // describe author table
 const Author = BaseModel.extend('Author', {
-    id:         fields.AutoSerial({nullable: false}),
+    id:         fields.AutoSerial({primaryKey: true, nullable: false}),
     first_name: fields.Text(),
     last_name:  fields.Text()
 });
@@ -193,7 +193,7 @@ const Author = BaseModel.extend('Author', {
 
 // describe Book table (returns constructor function)
 const Book = BaseModel.extend('Book', {
-    id: fields.AutoSerial({nullable: false}),
+    id: fields.AutoSerial({primaryKey: true, nullable: false}),
     title: fields.Text(),
     published_year: fields.SmallInt(),
 
