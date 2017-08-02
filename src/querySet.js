@@ -1,5 +1,5 @@
 const _query = require('./connect');
-const _models = require('./model');
+const _models = require('./model').models;
 
 
 const QueryType = {
@@ -22,12 +22,7 @@ function QuerySet(model = null) {
     return new QuerySet(model);
   }
 
-  try {
-    if(!model.isDerivedFrom(_models.BaseModel)) {
-      throw Error();
-    }
-  }
-  catch(err) {
+  if(!model.isDerivedFrom(_models.BaseModel)) {
     throw Error('QuerySet Error: model not provided');
   }
 

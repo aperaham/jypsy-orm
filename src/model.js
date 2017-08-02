@@ -17,7 +17,18 @@ function BaseModel(opts) {
 }
 
 
-BaseModel.prototype.init = function() {};
+function setInstanceFields(propFields) {
+  const keys = this._meta.getFieldNames();
+  for(let i = 0; i < keys.length; i++) {
+    const key = keys[i];
+    this[key] = (key in propFields) ? propFields[key] : undefined;
+  }
+}
+
+
+BaseModel.prototype.init = function(opts) {
+  setInstanceFields.call(this, opts);
+};
 
 
 // class inheritance ends
@@ -27,7 +38,10 @@ BaseModel.extend = extend;
 
 
 let models = { BaseModel };
-module.exports = models;
+module.exports = {
+  models
+};
+
 
 /**
  * `validateModelFields`:
@@ -290,45 +304,8 @@ function extend(modelName, props = {}) {
 	Object.assign(DBModel.prototype, props);
 	DBModel.prototype.constructor = DBModel;
 
-
   prepareModelMeta(DBModel, metaProps);
   prepareModelFields(DBModel, metaProps);
   setupORM(DBModel);
 	return DBModel;
 }
-
-
-models.Account = BaseModel.extend('Account', {
-  id: Fields.AutoSerial({primaryKey: true, nullable: false}),
-  email: Fields.CIText({nullable: true, unique: true})
-});
-
-
-models.Name = BaseModel.extend('Name', {
-  id: Fields.AutoSerial({primaryKey: true, nullable: false}),
-  account: Fields.ForeignKey({model: models.Account, reverse: 'name'}),
-  first: Fields.Text({value: 'Awesome!'}),
-  last: Fields.Text({nullable: false}),
-});
-
-
-models.Test = BaseModel.extend('Test', {
-  id: Fields.AutoSerial({primaryKey: true, nullable: false}),
-  account: Fields.ForeignKey({model: models.Account, nullable: false}),
-  name: Fields.Text({nullable: true}),
-  comment: Fields.Text({nullable: true}),
-
-  model: {
-    dbName: 'test'
-  }
-});
-
-
-models.Yo = models.Name.extend('Yo', {
-  id: Fields.AutoSerial({primaryKey: true, nullable: false})
-});
-
-
-module.exports = {
-  models
-};

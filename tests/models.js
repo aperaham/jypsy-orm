@@ -1,8 +1,8 @@
 const expect = require('chai').expect;
-const jypsyORM = require('../index');
+const jypsy = require('../index');
 
-const models = jypsyORM.model.models;
-const fields = jypsyORM.fields;
+const models = jypsy.model.models;
+const fields = jypsy.fields;
 
 
 describe('DBModel', function() {
@@ -45,6 +45,24 @@ describe('DBModel', function() {
           }
         });
       }).to.throw('dbName must be string');
+    });
+
+    it(`creates an instance of a model and assigns fields`, function() {
+      const Test = models.BaseModel.extend('Test', {
+        id: fields.AutoSerial({primaryKey: true, nullable: false}),
+        field_1: fields.BigInt(),
+        field_2: fields.Integer(),
+        field_3: fields.SmallInt(),
+        field_4: fields.Varchar({maxSize: 10})
+      });
+
+      let test = Test({id: 5, field_1: 100, field_3: 1, field_4: 'test'});
+
+      expect(test.id).to.equal(5);
+      expect(test.field_1).to.equal(100);
+      expect(test.field_2).to.equal(undefined);
+      expect(test.field_3).to.equal(1);
+      expect(test.field_4).to.equal('test');
     });
 
   }); /* Model Validation */
