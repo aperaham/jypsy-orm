@@ -4,7 +4,7 @@
   "description": "simple django-like ORM",
   "main": "index.js",
   "scripts": {
-    "test": "mocha tests/**/*.js",
+    "test": "mocha tests/**/*.js --use_strict",
     "make-test-db": "node scripts/create-test-database.js"
   },
   "author": "Luke Wilczoch",

@@ -27,7 +27,7 @@ describe('QuerySet', function() {
     it('retrieves all customers', function(done) {
       const Customer = getCustomerModel();
       Customer.orm.req().then(result => {
-        exp = expect(result).to.have.lengthOf(tables._data.customer.length);
+        let exp = expect(result).to.have.lengthOf(tables._data.customer.length);
         exp = exp.and.to.deep.include.members(tables._data.customer);
         done();
       });
