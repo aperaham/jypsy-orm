@@ -240,6 +240,76 @@ describe('General Field Validations', function() {
 
   }); /* describe Boolean */
 
+  describe('DateTime Field', function() {
+    it(`name is 'DateTime'`, function() {
+      expect(fields.DateTime.FieldType).to.equal('DateTime');
+    });
+
+    it('throws for default value not being Date instance or function', function() {
+      expect(function(){
+        const Customer = getCustomerModel();
+        const field = fields.DateTime({value: "Date instance"});
+        field.validateField('dateTimeField', Customer);
+      }).to.throw('must be Date instance or function');
+    });
+
+    it('throws for default value function not returning Date instance', function() {
+      expect(function(){
+        const Customer = getCustomerModel();
+        const field = fields.DateTime({value: () => {}});
+        field.validateField('dateTimeField', Customer);
+      }).to.throw('function must return Date instance');
+    });
+
+    it('has a default value function returning Date instance', function() {
+      expect(function(){
+        const Customer = getCustomerModel();
+        const field = fields.DateTime({value: () => {return new Date()}});
+        field.validateField('dateTimeField', Customer);
+      }).not.to.throw();
+    });
+
+    it('has a default value which is a Date instance', function() {
+      expect(function(){
+        const Customer = getCustomerModel();
+        const field = fields.DateTime({value: new Date()});
+        field.validateField('dateTimeField', Customer);
+      }).not.to.throw();
+    });
+
+    it('throws for having default value and using autoNow option', function() {
+      expect(function(){
+        const Customer = getCustomerModel();
+        const field = fields.DateTime({value: new Date(), autoNow: true});
+        field.validateField('dateTimeField', Customer);
+      }).to.throw('choose only one.');
+    });
+
+    it('generates correct SQL for using autoNow option', function() {
+        const Customer = getCustomerModel();
+        const field = fields.DateTime({autoNow: true});
+        field.validateField('dateTimeField', Customer);
+
+        expect(field.defaultToSQL()).to.contain('now()');
+    });
+
+    it('generates correct SQL for using autoNow option with timezone', function() {
+        const Customer = getCustomerModel();
+        const field = fields.DateTime({autoNow: true, timeZone: 'CST'});
+        field.validateField('dateTimeField', Customer);
+
+        expect(field.defaultToSQL()).to.contain(`now() at time zone 'CST'`);
+    });
+
+    it('creates DateTime with CST time zone', function() {
+      const Customer = getCustomerModel();
+      const field = fields.DateTime({timeZone: 'CST'});
+      field.validateField('dateTimeField', Customer);   
+      expect(field.options.timeZone).to.equal('CST');
+    });
+
+  }); /* describe DateTime */
+
   describe('ForeignKey Field', function() {
     it(`name is 'ForeignKey'`, function() {
       expect(fields.ForeignKey.FieldType).to.equal('ForeignKey');

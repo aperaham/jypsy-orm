@@ -414,6 +414,68 @@ Fields.ForeignKey = CreateField(Fields.BaseField, 'ForeignKey', {
 Fields.ForeignKey.onDelete = onDelete;
 
 
+const TimeZone = {
+  default: '' // 'CST'
+};
+
+Fields.DateTime = CreateField(Fields.BaseField, 'DateTime', {
+  defaults: {
+    nullable: true,
+    value: undefined,
+    unique: false,
+    dbName: undefined,
+    timeZone: '',
+    autoNow: false,
+  },
+
+  typeToSQL: function() {
+    let useTimeZone = this.options.timeZone.length ? 'WITH' : 'WITHOUT';
+    return `TIMESTAMP ${useTimeZone} TIME ZONE`;
+  },
+
+  validateDefaults: function() {
+    BaseField.prototype.validateDefaults.call(this);
+    if(!this.options.timeZone.length && TimeZone.default.length) {
+      this.options.timeZone = TimeZone.default;
+    }
+  },
+
+  defaultToSQL: function() {
+    if(this.options.autoNow) {
+      let tZone = this.options.timeZone.length ? ` at time zone '${this.options.timeZone}'` : '';
+      return `(now()${tZone})`;
+    }
+
+    if(typeof this.options.value === 'function') {
+      return `'${this.options.value().toISOString()}'`;
+    }
+    return `'${this.options.value}'`;
+  },
+
+  validateDefaultValue: function() {
+    const opts = this.options;
+    if(opts.value && opts.autoNow) {
+      throw FieldError(this, 'autoNow option used with default value. choose only one.');
+    }
+    if(typeof opts.value === 'undefined') {
+      // hack - table generator looks for ! undefined value when generating defaults
+      opts.value = true;
+      return;
+    }
+
+    if(typeof opts.value === 'function') {
+      if(!(opts.value() instanceof Date)) {
+        throw FieldError(this, 'default value function must return Date instance');
+      } 
+    }
+    else if(!(opts.value instanceof Date)) {
+      throw FieldError(this, 'default value must be Date instance or function');
+    }
+  }
+});
+Fields.DateTime.TimeZone = TimeZone;
+
+
 Fields.RelatedField = CreateField(Fields.ForeignKey, 'RelatedField', {
   typeToSQL: function() {
     throw FieldError(this, `field not for SQL purposes`);
