@@ -19,42 +19,39 @@ describe('QuerySet', function() {
       // drop test db tables and recreate
       createTestDB().then(result => {
         // add data to the customers table
-        result.populateAllTables();
-        done();
+        result.populateAllTables().then(done);
       });
     });
 
-    it('retrieves all customers', function(done) {
+    it('retrieves all customers', function() {
       const Customer = getCustomerModel();
-      Customer.orm.req().then(result => {
+      return Customer.orm.req().then(result => {
         let exp = expect(result).to.have.lengthOf(tables._data.customer.length);
         exp = exp.and.to.deep.include.members(tables._data.customer);
-        done();
       });
     });
 
-    it(`retrieves customer 'first' and 'last' columns`, function(done) {
+    it(`retrieves customer 'first' and 'last' columns`, function() {
       // get only first and last from columns
       let proofData = tables._data.customer.map(cust => {
         return { first: cust.first, last: cust.last };
       });
 
       const Customer = getCustomerModel();
-      Customer.orm.valuesList('first', 'last').req().then(result => {
+      return Customer.orm.valuesList('first', 'last').req().then(result => {
         let exp = expect(result).to.have.lengthOf(proofData.length);
         exp = exp.and.to.deep.include.members(proofData);
-        done();
       });
     });
 
     it(`reverse join to 'order' from 'customer' to retrieve customer ids`, function() {
       const proofData = tables._data.order.map(ord => {
-        return {id: ord.id}
+        return {is_paid: ord.is_paid}
       });
 
       const { Customer } = getRelatedModels();
-      const query = Customer.orm.valuesList('order.id');
-      return promise = query.req().then(result => {
+      const query = Customer.orm.valuesList('order.is_paid');
+      return query.req().then(result => {
         let exp = expect(result).to.have.lengthOf(proofData.length);
         exp = exp.and.to.deep.include.members(proofData);
       });
@@ -85,9 +82,9 @@ describe('QuerySet', function() {
       const { ItemTopping } = getRelatedModels();
 
       const proofQuerySQL = `
-        SELECT customer.first FROM "order" as ord
-        JOIN order_item ON order_item.order_id = ord.id
-        JOIN item ON item.id = order_item.item_id
+        SELECT customer.first from item_topping
+        JOIN order_item ON order_item.id = item_topping.order_item_id
+        JOIN "order" ord ON ord.id = order_item.order_id
         JOIN customer ON customer.id = ord.customer_id;
       `;
       let queryPromise = _query(proofQuerySQL);
@@ -140,12 +137,11 @@ describe('QuerySet', function() {
       // drop test db tables and recreate
       createTestDB().then(result => {
         // add data to the customers table
-        result.populateAllTables();
-        done();
+        result.populateAllTables().then(done);
       });
     });
 
-    it('retrieves a customer id', function() {
+    it('retrieves a customer by id', function() {
       const proofData = tables._data.customer[0];
 
       const Customer = getCustomerModel();
@@ -176,6 +172,28 @@ describe('QuerySet', function() {
       });
     });
 
+    it('filters for specific customer through join on order table', function() {
+      const { Order } = getRelatedModels();
+
+      const proofQuerySQL = `
+        SELECT ord.* FROM "order" ord
+        JOIN customer ON customer.id = ord.customer_id
+        WHERE customer.first = 'Steve';
+      `;
+      let queryPromise = _query(proofQuerySQL);
+
+      return queryPromise.then(proof => {
+        const proofData = proof.rows;
+
+        const orders = Order.orm.filter({customer__first: 'Steve'});
+
+        return orders.req().then(result => {
+          let exp = expect(result).to.have.lengthOf(result.length);
+          exp = exp.and.to.deep.include.members(proofData);
+        });
+      });
+    });
+
     it('subqueries all order_items from a customer: order_item(order(customer))', function() {
       const { Customer, Order, OrderItem } = getRelatedModels();
       const customer = tables._data.customer[0];
@@ -203,6 +221,29 @@ describe('QuerySet', function() {
         let exp = expect(result).to.have.lengthOf(proofData.length)
         exp = exp.and.to.deep.include.members(proofData);
       }));
+    });
+
+    it('subqueries lazy-style from order table by customer table for Steve', function() {
+      const { Customer, Order } = getRelatedModels();
+
+      const proofQuerySQL = `
+        SELECT ord.* FROM "order" ord
+        WHERE ord.customer_id IN (
+          SELECT id FROM customer
+          WHERE customer.first = 'Steve'
+        );
+      `;
+      let queryPromise = _query(proofQuerySQL);
+
+      return queryPromise.then(proof => {
+        const proofData = proof.rows;
+
+        const steves = Customer.orm.filter({first: 'Steve'});
+        return Order.orm.filter({customer: steves}).req().then(result => {
+          let exp = expect(result).to.have.lengthOf(result.length);
+          exp = exp.and.to.deep.include.members(proofData);
+        });
+      });
     });
   });
 

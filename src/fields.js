@@ -137,6 +137,11 @@ BaseField.prototype.construct = function(opts) {
  * @param {string} (required) the name of the field passed from the model
  */
 BaseField.prototype.validateField = function(fieldName, parentModel) {
+  // validate here
+  if(typeof this.options !== 'object') {
+    throw FieldError(this, 'options must be an object!');
+  }
+
   this.fieldName = fieldName;
   
   if(this.options.dbName === undefined) {
@@ -147,12 +152,6 @@ BaseField.prototype.validateField = function(fieldName, parentModel) {
     throw FieldError(this, 'parent model not DBModel');
   }
   this.parentModel = parentModel;
-
-  // validate here
-  if(typeof this.options !== 'object') {
-    throw FieldError(this, 'options must be an object!');
-  }
-
   this.parseDefaultOptions();
 };
 
@@ -212,6 +211,11 @@ BaseField.prototype.toTableSQL = function() {
     sql += ' UNIQUE'
   }
   return sql;
+};
+
+
+BaseField.prototype.nameToSQL = function() {
+  return `"${this.parentModel._meta.dbName}"."${this.options.dbName}"`;
 };
 
 
@@ -409,6 +413,28 @@ Fields.ForeignKey = CreateField(Fields.BaseField, 'ForeignKey', {
     if(!this.options.reverse) {
       this.options.reverse = this.parentModel._meta.dbName;
     }
+  },
+  toJoinSQL: function(joinType = null, alias = null, parentAlias = null) {
+    const meta = this.options.model._meta;
+
+    let joinTableName = meta.dbName;
+    let asAlias = alias !== joinTableName ? alias : null;
+    let joinPKName = meta.getModelPK().options.dbName;
+    let asTable = asAlias ? asAlias : joinTableName;
+
+    let pModel = this.parentModel;
+    let pTableName = parentAlias ? parentAlias : pModel._meta.dbName;
+    let dbFieldName = this.options.dbName;
+    
+    const join = joinType == null ? 'JOIN' : `${joinType} JOIN`;
+    let joinSQL = `${join} "${joinTableName}" `;
+    
+    if(asAlias) {
+      joinSQL += `"${asAlias}" `;
+    }
+
+    joinSQL += `ON "${asTable}"."${joinPKName}"`;
+    return joinSQL + ` = "${pTableName}"."${dbFieldName}"`;
   }
 });
 Fields.ForeignKey.onDelete = onDelete;
@@ -480,12 +506,45 @@ Fields.RelatedField = CreateField(Fields.ForeignKey, 'RelatedField', {
   typeToSQL: function() {
     throw FieldError(this, `field not for SQL purposes`);
   },
+
   validateDefaults: function() {
     //Fields.ForeignKey.prototype.validateDefaults.call(this);
     const opts = this.options;
     if(!opts.field) {
       throw FieldError(this, 'requires Field');
     }
+  },
+
+  nameToSQL: function() {
+    const field = this.options.model._meta.getModelPK();
+    return `"${field.parentModel._meta.dbName}"."${field.options.dbName}"`;
+  },
+
+  toJoinSQL: function(joinType = null, alias = null, parentAlias = null) {
+    const meta = this.options.model._meta;
+    const field = this.options.field;
+    const fieldModel = field.options.model;
+    const fieldMeta = fieldModel._meta;
+
+    let joinTableName = meta.dbName;
+    let asAlias = alias !== joinTableName ? alias : null;
+    let joinFKName = field.options.dbName;
+    let asTable = asAlias ? asAlias : joinTableName;
+
+    let pModel = this.parentModel;
+    let pTableName = parentAlias ? parentAlias : pModel._meta.dbName;
+    let dbFieldName = pModel._meta.getModelPK().options.dbName;
+
+    const join = joinType == null ? 'JOIN' : `${joinType} JOIN`;
+    let joinSQL = `${join} "${joinTableName}"`;
+
+    if(asAlias) {
+      joinSQL += ` "${asAlias}"`;
+      joinTableName = asAlias;
+    }
+
+    joinSQL += ` ON "${joinTableName}"."${joinFKName}"`;
+    return joinSQL + ` = "${pTableName}"."${dbFieldName}"`;
   }
 });
 

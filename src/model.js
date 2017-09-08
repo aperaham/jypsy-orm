@@ -167,6 +167,22 @@ function prepareModelMeta(modelClass, props) {
     return `CREATE TABLE ${_meta.dbName} (\n  ${fields.join(', \n  ')}\n);`;
   };
 
+  // find pk
+  let pkField;
+  (() => {
+    let f = props.fields;
+    for(let k in f) {
+      if(f[k].options.primaryKey) {
+        pkField = f[k];
+        break;
+      }
+    }
+  })();
+
+  _meta.getModelPK = function() {
+    return pkField;
+  };
+
   modelClass._meta = _meta;
   modelClass.prototype._meta = _meta;
 }
@@ -202,9 +218,9 @@ function prepareModelFields(modelClass, props) {
       
       // the "reverse" part... add the field to the related model's list.
       const relatedField = Fields.RelatedField({
-        model: modelClass, field: field, pk: _fields.id
+        model: modelClass, field: field
       });
-      relatedField.validateField(reverseName, modelClass);
+      relatedField.validateField(reverseName, relatedModel);
       relatedModel._meta._related[reverseName] = relatedField;
     }
   }

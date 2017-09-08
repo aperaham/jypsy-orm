@@ -1,5 +1,6 @@
 const _query = require('./connect');
 const _models = require('./model').models;
+const { JoinTree, JoinType } = require('./joinTree.js');
 
 
 const QueryType = {
@@ -17,6 +18,19 @@ function QSError(instance, msg) {
 }
 
 
+function JoinsNotAllowedError(instance, fieldName) {
+  if(!(this instanceof JoinError)) {
+    return new JoinError(instance, fieldName);
+  }
+  this.name = 'JoinsNotAllowedError';
+  this.stack = (new Error()).stack;
+  const msg = `Join not allowed for field: ${fieldName}`;
+  this.message = `${instance._model.name} Model QuerySet Error: ${msg}`;
+}
+JoinsNotAllowedError.prototype = Object.create(Error.prototype);
+JoinsNotAllowedError.prototype.constructor = JoinsNotAllowedError;
+
+
 function QuerySet(model = null) {
   if(!(this instanceof QuerySet)) {
     return new QuerySet(model);
@@ -26,110 +40,227 @@ function QuerySet(model = null) {
     throw Error('QuerySet Error: model not provided');
   }
 
-  this._init({});
   this._model = model;
+  this._init({});
 }
 
 
 function splitJoinFields(field) {
   const joins = [];
   let index = 0;
-  let isLeftJoin;
+  let joinType;
   let regResult = null;
   let skip;
+
+  // '.' character is right join, '__' is left join
   const reg = new RegExp('\\.|__');
 
   while(regResult = reg.exec(field)) {
     index = regResult.index;
+
     if(regResult[0]  == '.') {
-      isLeftJoin = false;
+      joinType = JoinType.INNER;
       skip = 1;
     }
+
     else {
-      isLeftJoin = true;
+      joinType = JoinType.LEFT;
       skip = 2;
     }
+
     joins.push({
-      leftJoin: isLeftJoin,
+      join: joinType,
       field: field.slice(0, index)
     });
+
     field = field.slice(index + skip);
   }
+
   if(field.length) {
     joins.push({
-      leftJoin: false,
+      join: null,
       field: field
     });
   }
+
   return joins;
 }
 
 
 function FieldDoesNotExistError(fieldName, meta, model) {
   const choices = meta.getFieldNames().join(', ');
-  let msg = `field '${fieldName}' doesn't exist in ${model.name} model.`
+  let msg = `field '${fieldName}' doesn't exist in ${model.name} model.`;
   msg += ` choices are: ${choices}`;
   throw QSError(this, msg);
 }
 
 
-function validateFieldJoins(joins) {
+function buildJoins(joins) {
   let meta = this._model._meta;
-  let fieldModel = this._model;
-  let joinSelectFields = [];
+  let model = this._model;
 
-  let field;
+  let node = this._joinTree.getFirstNode();
+
   for(let i = 0; i < joins.length; i++) {
-    let fieldName = joins[i].field;
-    field = meta.getFieldByName(fieldName);
+    const fieldName = joins[i].field;
+    const joinType = joins[i].join;
+
+    const field = meta.getFieldByName(fieldName);
+
     if(!field) {
-      FieldDoesNotExistError.call(this, fieldName, meta, fieldModel);
+      FieldDoesNotExistError.call(this, fieldName, meta, model);
     }
-    if(field.options.model) {
-      meta = field.options.model._meta;
-      fieldModel = field.options.model;
+
+    if(!field.options.model) continue;
+
+    model = field.options.model;
+    meta = model._meta;
+
+    // don't create join if this is the last FK field
+    if(field.constructor.name === 'ForeignKey' && i == joins.length - 1) {
+      continue;
     }
+
+    node = this._joinTree.findOrCreateNode(node, field, joinType);
+
+    const join = field.toJoinSQL(joinType);
+    this._joins[join] = true;
   }
-  return field;
 }
 
 
-function validateField(fieldName) {
+function _visitJoinTreeNodes(tree) {
+  let results = '';
+  const keys =  Object.keys(tree);
+
+  for(let i = 0; i < keys.length; i++) {
+    let model = keys[i];
+
+    for(let joinType in tree[model]) {
+      let node = tree[model][joinType];
+      results += `${joinType} JOIN ${node.field.alias}`;
+      results += ' ' + _visitJoinTreeNodes(node.tree);
+    }
+  }
+
+  return results;
+}
+
+
+/**
+ * `generateJoinSQL`:
+ * build the join tree and return join sql as a string
+ */
+function generateJoinSQL() {
+  let queryFields;
+
+  switch(this._qType) {
+    case null:
+    case QueryType.VALUES_LIST:
+      queryFields = this._selectFields;
+      break;
+
+    case QueryType.INSERT:
+      queryFields = this._insertFields;
+      break;
+
+    case QueryType.UPDATE:
+      queryFields = this._updateFields;
+
+    default:
+      // why?
+      const msg = `error building join with query type: ${this._queryType}`;
+      throw QSError(this, msg);
+  }
+
+  this._joinTree.reset();
+
+  queryFields.forEach(i => buildJoins.call(this, i));
+
+  this._distinctFields.forEach(i => buildJoins.call(this, i));
+  this._orderFields.forEach(i => buildJoins.call(this, i));
+
+  this._filters.forEach(i => buildJoins.call(this, i.join));
+  this._notFilters.forEach(i => buildJoins.call(this, i.join));
+
+  // return join SQL string
+  return this._joinTree.generateJoinSQL();
+}
+
+
+
+function validateJoins(joins) {
+  let meta = this._model._meta;
+  let model = this._model;
+
+  for(let i = 0; i < joins.length; i++) {
+    const fieldName = joins[i].field;
+    const joinType = joins[i].join;
+
+    let field = meta.getFieldByName(fieldName);
+
+    if(!field) {
+      FieldDoesNotExistError.call(this, fieldName, meta, model);
+    }
+
+    if(!field.options.model) continue;
+
+    model = field.options.model;
+    meta = model._meta; 
+  }
+}
+
+
+function validateField(fieldName, allowJoins = true) {
   if(typeof fieldName !== 'string') {
     throw QSError(this, `got ${fieldName} with type ${typeof fieldName} but must be string!`);
   }
-
-  let meta = this._model._meta;
+ 
   const joins = splitJoinFields(fieldName);
 
+  if(joins.length > 1 && !allowJoins) {
+    throw JoinsNotAllowedError(this, fieldName);
+  }
+
   if(!joins.length) {
+    let meta = this._model._meta;
     FieldDoesNotExistError.call(this, fieldName, meta, this._model);
   }
-  if(joins.length > 1) {
-    return validateFieldJoins.call(this, joins);
-  }
-  
-  let field = meta.getFieldByName(fieldName);
-  if(!field) {
-    field = meta.getRelatedField(fieldName);
-    if(!field) {
-      FieldDoesNotExistError.call(this, fieldName, meta, this._model);
-    }
-    field = field.options.pk;
-  }
-  return field;
+
+  validateJoins.call(this, joins);
+  // buildJoins.call(this, joins);
+  return joins;
 }
 
 
-function getSelectFields() {
-  let selectFields;
+function getSelectFields(subQueryDepth = 0) {
   if(this._selectFields.length == 0) {
+    
+    if(subQueryDepth > 0) {
+      // this is a subquery and no select fields have been specifically selected. 
+      // in this case, implicitly 'select' the primary key
+      let field = this._model._meta.getModelPK();
+      return field.nameToSQL();
+    }
+
     // get all fields in the model if no fields were initially selected
-    selectFields = this._model._meta.getDBFieldNames();
+    const fields = this._model._meta.getDBFieldNames();
+    const modelName = this._model._meta.dbName;
+
+    let selectFields = [];
+
+    for(let i = 0; i < fields.length; i++) {
+      selectFields.push(`"${modelName}"."${fields[i]}"`);
+    }
+
+    return selectFields;
   }
-  else {
-    selectFields = this._selectFields;
-  }
+
+  let selectFields = this._selectFields.map(i => {
+    const field = this._joinTree.findField(i);
+    return field.nameToSQL();
+  });
+  
   return selectFields.join(', ');
 }
 
@@ -180,34 +311,37 @@ function getInsertSQL(values = []) {
 
 function processQueryFilters(inValues = [], depth = 0, isNotQuery = false) {
   if(depth > 0 && 
-      this._qType != QueryType.VALUES_LIST && this._qType != null
-  ) {
+      this._qType != QueryType.VALUES_LIST && this._qType != null) {
     throw QSError(this, `subquery must be 'SELECT'!`);
   }
 
   let result = { SQL: '', values: inValues.slice()};
-  let whereValues = isNotQuery ? this._notFilters : this._filters;
-  let keys = Object.keys(whereValues);
-  if(keys.length === 0) return result;
+
+  const filters = isNotQuery ? this._notFilters : this._filters;
+  if(filters.length === 0) return result;
 
   let sqlWhere = [];
   let outValues = result.values;
   let paramCount = inValues.length;
   let paramIndex = 1;
 
-  for(let i = 0; i < keys.length; i++) {
-    let key = keys[i];
-    let q = whereValues[key];
+  for(let i = 0; i < filters.length; i++) {
+    const filter = filters[i];
+    let q = filter.value;
+
     if(typeof q === 'undefined') {
-      throw QSError(this, `filter key '${key}' is undefined!`);
+      throw QSError(this, `filter key is undefined!`);
     }
 
-    let field = validateField.call(this, key);
+    //let field = validateField.call(this, key);
+    const field = this._joinTree.findField(filter.join);
+    const fieldName = field.nameToSQL();
+    //const fieldName = `"${field.parentModel._meta.dbName}"."${field.options.dbName}"`;
 
     switch(q !== null && q.constructor.name) {
       case 'QuerySet': 
         const subQuery = generateSQL.call(q, outValues, depth + 1);
-        sqlWhere.push(`${field.options.dbName} IN (${subQuery.SQL})`);
+        sqlWhere.push(`${fieldName} IN (${subQuery.SQL})`);
         outValues = subQuery.values;
         paramCount = outValues.length;
         break;
@@ -219,16 +353,16 @@ function processQueryFilters(inValues = [], depth = 0, isNotQuery = false) {
           arraySQL.push(`$${tempParamCount + x}`);
           outValues.push(q[x]);
         }
-        sqlWhere.push(`${field.options.dbName} IN (${arraySQL.join(', ')})`);
+        sqlWhere.push(`${fieldName} IN (${arraySQL.join(', ')})`);
         paramCount = outValues.length;
         break;
 
       default:
         if(q === null) {
-          sqlWhere.push(`${field.options.dbName} IS NULL`);
+          sqlWhere.push(`${fieldName} IS NULL`);
           break;
         }
-        sqlWhere.push(`${field.options.dbName} = $${paramIndex + paramCount}`);
+        sqlWhere.push(`${fieldName} = $${paramIndex + paramCount}`);
         ++paramIndex;
         outValues.push(q);
         break;
@@ -293,9 +427,9 @@ function processQueryFields(queryType = QueryType.VALUES_LIST, args) {
   }
 
   for(let i = 0; i < args.length; i++) {
-    let fieldName = args[i];
-    let field = validateField.call(this, fieldName);
-    fieldList.push(field.options.dbName);
+    const fieldName = args[i];
+    const joins = validateField.call(this, fieldName);
+    fieldList.push(joins);
   }
 }
 
@@ -348,6 +482,8 @@ function argsAreStringsOrThrow(QueryType, args) {
  *   recursion depth, to keep track of subquery count
  */
 function generateSQL(values = [], subQueryDepth = 0) {  
+  let joinSQL = generateJoinSQL.call(this);
+
   let whereQuery = processQueryFilters.call(this, values, subQueryDepth);
   let notInQuery = processQueryFilters.call(this, whereQuery.values, subQueryDepth, true)
   let outValues = notInQuery.values.slice();
@@ -366,7 +502,7 @@ function generateSQL(values = [], subQueryDepth = 0) {
     filterSQL = `WHERE ${filterSQL}`;
   }
 
-  let selectFields = getSelectFields.call(this);
+  let selectFields = getSelectFields.call(this, subQueryDepth);
 
   let tableName = this._model._meta.dbName;
   if(this._isDist) {
@@ -391,18 +527,17 @@ function generateSQL(values = [], subQueryDepth = 0) {
 
     case QueryType.UPDATE:
       let updateSQL = getUpdateFields.call(this, outValues);
-      queryTypeSQL = `UPDATE ${tableName} ${updateSQL.SQL}`;
+      queryTypeSQL = `UPDATE "${tableName}" ${updateSQL.SQL}`;
       outValues = updateSQL.values;
       break;
 
     case QueryType.DELETE:
-      queryTypeSQL = `DELETE FROM ${tableName}`;
-      // blank out order because it isn't valid for 'DELETE'
+      queryTypeSQL = `DELETE FROM "${tableName}"`;
       break;
 
     case QueryType.INSERT:
       let insertSQL = getInsertSQL.call(this, outValues);
-      queryTypeSQL = `INSERT INTO ${tableName} ${insertSQL.SQL}`;
+      queryTypeSQL = `INSERT INTO "${tableName}" ${insertSQL.SQL}`;
       outValues = insertSQL.values;
       break;
 
@@ -412,6 +547,15 @@ function generateSQL(values = [], subQueryDepth = 0) {
   }
 
   let SQL = queryTypeSQL;
+  // add join SQL
+  //const joins = Object.keys(this._joins);
+  //if(joins.length) {
+  //SQL += ' ' + joins.join(' ');
+  //}
+
+  SQL += joinSQL;
+
+  // add 'where' filter SQL
   if(filterSQL.length) {
     SQL += ` ${filterSQL}`;
   }
@@ -425,28 +569,97 @@ function generateSQL(values = [], subQueryDepth = 0) {
 }
 
 
-QuerySet.prototype._init = function(fields) {};
+QuerySet.prototype._init = function(fields) {
+
+  /**
+   * `_qType`:
+   * tracks the type of database operation.
+   * update, delete, insert, select, etc...
+   */
+  this._qType = null;
+
+
+  this._joins = {};
+  this._joinTree = new JoinTree(this._model);
+
+  this._distinctFields = [];
+  this._isDist = false;
+
+  /**
+   * `_filters`:
+   * used to calculate the `WHERE` sql clause
+   */
+  this._filters = [];
+  this._notFilters = [];
+
+  this._insertFields = [];
+
+  /**
+   * `_orderFields`:
+   * an array of strings containing the names of fields to be places in the ORDER BY clause.
+   * fields are marked as ordered by ASC by default. 
+   * to order by DESC, prepend '-' character to string. 
+   */
+  this._orderFields = [];
+
+  /**
+   * `_orderDescending`:
+   * an array of bools (true/false) 
+   * if true, the field will be marked as DESC (descending order). 
+   * `_orderDescending` contains a 1 to 1 correspondence with the `_orderFields` array.
+   * example:
+   * this._orderFields =     ['id',      '-total', 'email'];
+   * this._orderDescending = [ false,     true,     false];
+   */
+  this._orderDescending = [];
+
+  this._selectFields = [];
+  this._updateFields = null;
+};
+
+
+function validateQueryFields(query, methodType, allowJoins = true) {
+  if(typeof query !== 'object') {
+    throw QSError(this, `'${methodType}' query accepts only object`);
+  }
+
+  const keys = Object.keys(query);
+  const joinList = [];
+
+  for(let i = 0; i < keys.length; i++) {
+    let key = keys[i];
+    try {
+      const joins = validateField.call(this, key, allowJoins);
+      joinList.push({join: joins, value: query[key]});
+    }
+    catch(err) {
+      if(err instanceof JoinsNotAllowedError) {
+        throw QSError(this, `'${methodType}' query does not allow joins`);
+      }
+      throw err;
+    }
+  }
+  return joinList;
+}
 
 
 /**
  * @param {object} fields
  */
 QuerySet.prototype.filter = function(fields = {}) {
-  if(typeof fields !== 'object') {
-    throw QSError(this, 'filter accepts only object');
-  }
+  const fieldsList = validateQueryFields.call(this, fields, 'filter');
+
   let clone = this._clone();
-  clone._filters = fields;
+  clone._filters = fieldsList;
   return clone;
 };
 
 
 QuerySet.prototype.not = function(fields = {}) {
-  if(typeof fields !== 'object') {
-    throw QSError(this, 'filter accepts only object');
-  }
+  const fieldsList = validateQueryFields.call(this, fields, 'not');
+
   let clone = this._clone();
-  clone._notFilters = fields;
+  clone._notFilters = fieldsList;
   return clone;
 };
 
@@ -455,44 +668,32 @@ QuerySet.prototype.delete = function() {
   if(arguments.length) {
     throw QSError(this, `delete does not take parameters`);
   }
+  
   const clone = this._clone();
-
-  if(clone._qType != null && clone._qType != QueryType.VALUES_LIST) {
-    throw QSError(clone, `multiple query types.`);
-  }
-  clone._qType = QueryType.DELETE;
+  validateChainedQueries.call(clone, QueryType.DELETE);
   return clone;
-}
+};
 
-QuerySet.prototype._insertFields = {};
+
 QuerySet.prototype.insert = function(fields = {}) {
-  if(typeof fields !== 'object') {
-    throw QSError(this, `insert must contain fields in the form of an object`);
-  }
+  // don't allow joins for insert
+  const fieldsList = validateQueryFields.call(this, fields, 'insert', false);
 
   const clone = this._clone();
   validateChainedQueries.call(clone, QueryType.INSERT);
-  clone._insertFields = fields;
+  clone._insertFields = fieldsList;
   return clone; 
-}
+};
 
 
-/**
- * `_qType`:
- * tracks the type of database operation.
- * update, delete, insert, select, etc...
- */
-QuerySet.prototype._qType = null;
-QuerySet.prototype._distinctFields = [];
-QuerySet.prototype._isDist = false;
+QuerySet.prototype.update = function(fields = {}) {
+  const fieldsList = validateQueryFields.call(this, fields, 'updated');
 
-
-/**
- * `_filters`:
- * used to calculate the `WHERE` sql clause
- */
-QuerySet.prototype._filters = {};
-QuerySet.prototype._notFilters = {};
+  let clone = this._clone();
+  validateChainedQueries.call(clone, QueryType.UPDATE);
+  clone._updateFields = fieldsList;
+  return clone;
+};
 
 
 QuerySet.prototype.distinct = function() {
@@ -502,28 +703,7 @@ QuerySet.prototype.distinct = function() {
   clone._isDist = true;
   processQueryFields.call(clone, QueryType.DISTINCT, arguments);
   return clone;
-}
-
-
-/**
- * `_orderFields`:
- * an array of strings containing the names of fields to be places in the ORDER BY clause.
- * fields are marked as ordered by ASC by default. 
- * to order by DESC, prepend '-' character to string. 
- */
-QuerySet.prototype._orderFields = [];
-
-
-/**
- * `_orderDescending`:
- * an array of bools (true/false) 
- * if true, the field will be marked as DESC (descending order). 
- * `_orderDescending` contains a 1 to 1 correspondence with the `_orderFields` array.
- * example:
- * this._orderFields =     ['id',      '-total', 'email'];
- * this._orderDescending = [ false,     true,     false];
- */
-QuerySet.prototype._orderDescending = [];
+};
 
 
 QuerySet.prototype.order = function() {
@@ -543,10 +723,7 @@ QuerySet.prototype.order = function() {
   }
   processQueryFields.call(clone, QueryType.ORDER_BY, args);
   return clone;
-}
-
-
-QuerySet.prototype._selectFields = [];
+};
 
 
 QuerySet.prototype.valuesList = function() {
@@ -559,25 +736,11 @@ QuerySet.prototype.valuesList = function() {
 };
 
 
-QuerySet.prototype._updateFields = null;
-QuerySet.prototype.update = function(fields = {}) {
-  if(typeof fields !== 'object') {
-    throw QSError(this, 'update accepts only object of fields!');
-  }
-
-  let clone = this._clone();
-  validateChainedQueries.call(clone, QueryType.UPDATE);
-  clone._updateFields = fields;
-  return clone;
-};
-
-
 QuerySet.prototype._clone = function() {
   let clone = Object.assign({}, this);
   Object.setPrototypeOf(clone, QuerySet.prototype);
   return clone;
-}
-
+};
 
 
 /**
@@ -622,7 +785,7 @@ QuerySet.prototype.req = function() {
 
   const qType = this._qType !== null ? this._qType : QueryType.VALUES_LIST;  
   return promise.then(reqHandler[qType], reqError);
-}
+};
 
 
 module.exports = QuerySet;
