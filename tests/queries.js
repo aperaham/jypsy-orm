@@ -293,5 +293,16 @@ describe('QuerySet', function() {
         expect(result).to.have.lengthOf(0);
       }));
     });
+
+    it(`deletes customers matching backward relation filter`, function() {
+      const { Customer, Order } = getRelatedModels();
+      
+      // delete only customers with haven't made orders
+      let noOrders = Customer.orm.filter({order__id: null}).delete();
+      return noOrders.req().then(result => {
+        expect(result).to.equal(2);
+      });
+    });
+
   });
 });

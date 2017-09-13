@@ -152,6 +152,7 @@ function _visitJoinTreeNodes(tree) {
  * build the join tree and return join sql as a string
  */
 function generateJoinSQL() {
+  this._joinTree.reset();
   let queryFields;
 
   switch(this._qType) {
@@ -168,14 +169,12 @@ function generateJoinSQL() {
       queryFields = this._updateFields;
 
     default:
-      // why?
-      const msg = `error building join with query type: ${this._queryType}`;
-      throw QSError(this, msg);
+      queryFields = null;
   }
 
-  this._joinTree.reset();
-
-  queryFields.forEach(i => buildJoins.call(this, i));
+  if(queryFields != null) {
+    queryFields.forEach(i => buildJoins.call(this, i));
+  }
 
   this._distinctFields.forEach(i => buildJoins.call(this, i));
   this._orderFields.forEach(i => buildJoins.call(this, i));
@@ -547,13 +546,7 @@ function generateSQL(values = [], subQueryDepth = 0) {
   }
 
   let SQL = queryTypeSQL;
-  // add join SQL
-  //const joins = Object.keys(this._joins);
-  //if(joins.length) {
-  //SQL += ' ' + joins.join(' ');
-  //}
-
-  SQL += joinSQL;
+  SQL += ' ' + joinSQL;
 
   // add 'where' filter SQL
   if(filterSQL.length) {
