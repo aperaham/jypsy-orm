@@ -39,7 +39,6 @@ function JoinTree(model) {
 
 // return copy of the JoinTree
 JoinTree.prototype.clone = function() {
-  // TODO: get this working
   const clone = Object.assign({}, this);
   clone._joinMap = Object.assign({}, this._joinMap);
   clone._joinMap.models = Object.assign({}, this._joinMap.models);
