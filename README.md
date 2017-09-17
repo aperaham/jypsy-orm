@@ -16,7 +16,7 @@ Features:
     - distinct
     - orderBy
     - sub queries
-    - joins and reverse relations (in development)
+    - joins and reverse relations
     - models
     - fields
 
@@ -120,7 +120,7 @@ reports.req().then(result => {
 ```
 
 
-Django ORM-style joins (in development)
+Django ORM-style joins
 
 ```javascript
 
