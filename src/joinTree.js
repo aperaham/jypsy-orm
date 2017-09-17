@@ -37,6 +37,18 @@ function JoinTree(model) {
 };
 
 
+// return copy of the JoinTree
+JoinTree.prototype.clone = function() {
+  // TODO: get this working
+  const clone = Object.assign({}, this);
+  clone._joinMap = Object.assign({}, this._joinMap);
+  clone._joinMap.models = Object.assign({}, this._joinMap.models);
+  clone._joinMap.tree = Object.assign({}, this._joinMap.tree);
+  Object.setPrototypeOf(clone, JoinTree.prototype);
+  return clone;
+}
+
+
 JoinTree.prototype.reset = function() {
   this._joinMap = {
     models: { [this._model._meta.dbName]: 1 },
@@ -62,7 +74,6 @@ function visitJoinTreeNodes(tree, prevField = null) {
     for(let joinType in tree[model]) {
       let node = tree[model][joinType];
       results += node.field.toJoinSQL(joinType, pAlias);
-      //results += `${joinType} JOIN ${node.field._alias}`;
       results += ' ' + visitJoinTreeNodes(node.tree, node.field);
     }
   }

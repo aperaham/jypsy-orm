@@ -248,6 +248,15 @@ describe('QuerySet', function() {
   });
 
   describe('delete', function() {
+
+    before(function(done) {
+      // drop test db tables and recreate
+      createTestDB().then(result => {
+        // add data to the customers table
+        result.populateAllTables().then(done);
+      });
+    });
+
     it(`filters for a row that doesn't exist and tries to delete it`, function() {
       const Customer = getCustomerModel();
 
@@ -296,10 +305,10 @@ describe('QuerySet', function() {
 
     it(`deletes customers matching backward relation filter`, function() {
       const { Customer, Order } = getRelatedModels();
-      
-      // delete only customers with haven't made orders
+
+      // delete only customers that haven't made orders
       let noOrders = Customer.orm.filter({order__id: null}).delete();
-      return noOrders.req().then(result => {
+      noOrders.req().then(result => {
         expect(result).to.equal(2);
       });
     });
