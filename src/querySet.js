@@ -699,8 +699,7 @@ QuerySet.prototype.filter = function(fields = {}) {
   const fieldsList = validateQueryFields.call(this, fields, 'filter');
 
   this._filters = fieldsList;
-  let clone = this._clone();
-  return clone;
+  return this._clone();
 };
 
 
@@ -708,8 +707,7 @@ QuerySet.prototype.not = function(fields = {}) {
   const fieldsList = validateQueryFields.call(this, fields, 'not');
 
   this._notFilters = fieldsList;
-  let clone = this._clone();
-  return clone;
+  return this._clone();
 };
 
 
@@ -718,9 +716,8 @@ QuerySet.prototype.delete = function() {
     throw QSError(this, `delete does not take parameters`);
   }
   
-  const clone = this._clone();
-  validateChainedQueries.call(clone, QueryType.DELETE);
-  return clone;
+  validateChainedQueries.call(this, QueryType.DELETE);
+  return this._clone();
 };
 
 
@@ -729,9 +726,8 @@ QuerySet.prototype.insert = function(fields = {}) {
   const fieldsList = validateQueryFields.call(this, fields, 'insert', false);
 
   this._insertFields = fieldsList;
-  const clone = this._clone();
-  validateChainedQueries.call(clone, QueryType.INSERT);
-  return clone; 
+  validateChainedQueries.call(this, QueryType.INSERT);
+  return this._clone();
 };
 
 
@@ -740,9 +736,8 @@ QuerySet.prototype.update = function(fields = {}) {
   const fieldsList = validateQueryFields.call(this, fields, 'update', false);
 
   this._updateFields = fieldsList;
-  let clone = this._clone();
-  validateChainedQueries.call(clone, QueryType.UPDATE);
-  return clone;
+  validateChainedQueries.call(this, QueryType.UPDATE);
+  return this._clone();
 };
 
 
@@ -751,8 +746,7 @@ QuerySet.prototype.distinct = function() {
   this._distinctFields = [];
   this._isDist = true;
   processQueryFields.call(this, QueryType.DISTINCT, arguments);
-  let clone = this._clone();
-  return clone;
+  return this._clone();
 };
 
 
