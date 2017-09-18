@@ -126,24 +126,6 @@ function buildJoins(joins) {
 }
 
 
-function _visitJoinTreeNodes(tree) {
-  let results = '';
-  const keys =  Object.keys(tree);
-
-  for(let i = 0; i < keys.length; i++) {
-    let model = keys[i];
-
-    for(let joinType in tree[model]) {
-      let node = tree[model][joinType];
-      results += `${joinType} JOIN ${node.field.alias}`;
-      results += ' ' + _visitJoinTreeNodes(node.tree);
-    }
-  }
-
-  return results;
-}
-
-
 /**
  * `generateJoinSQL`:
  * build the join tree and return join sql as a string
@@ -217,7 +199,6 @@ function validateField(fieldName, allowJoins = true) {
   }
 
   validateJoins.call(this, joins);
-  // buildJoins.call(this, joins);
   return joins;
 }
 
@@ -319,10 +300,8 @@ function processQueryFilters(inValues = [], depth = 0, isNotQuery = false) {
       throw QSError(this, `filter key is undefined!`);
     }
 
-    //let field = validateField.call(this, key);
     const field = this._joinTree.findField(filter.join);
     const fieldName = field.nameToSQL();
-    //const fieldName = `"${field.parentModel._meta.dbName}"."${field.options.dbName}"`;
 
     switch(q !== null && q.constructor.name) {
       case 'QuerySet': 
@@ -719,8 +698,8 @@ function validateQueryFields(query, methodType, allowJoins = true) {
 QuerySet.prototype.filter = function(fields = {}) {
   const fieldsList = validateQueryFields.call(this, fields, 'filter');
 
+  this._filters = fieldsList;
   let clone = this._clone();
-  clone._filters = fieldsList;
   return clone;
 };
 
@@ -728,8 +707,8 @@ QuerySet.prototype.filter = function(fields = {}) {
 QuerySet.prototype.not = function(fields = {}) {
   const fieldsList = validateQueryFields.call(this, fields, 'not');
 
+  this._notFilters = fieldsList;
   let clone = this._clone();
-  clone._notFilters = fieldsList;
   return clone;
 };
 
@@ -749,9 +728,9 @@ QuerySet.prototype.insert = function(fields = {}) {
   // don't allow joins for insert
   const fieldsList = validateQueryFields.call(this, fields, 'insert', false);
 
+  this._insertFields = fieldsList;
   const clone = this._clone();
   validateChainedQueries.call(clone, QueryType.INSERT);
-  clone._insertFields = fieldsList;
   return clone; 
 };
 
@@ -760,54 +739,52 @@ QuerySet.prototype.update = function(fields = {}) {
   // no joins for updates
   const fieldsList = validateQueryFields.call(this, fields, 'update', false);
 
+  this._updateFields = fieldsList;
   let clone = this._clone();
   validateChainedQueries.call(clone, QueryType.UPDATE);
-  clone._updateFields = fieldsList;
   return clone;
 };
 
 
 QuerySet.prototype.distinct = function() {
   argsAreStringsOrThrow(QueryType.DISTINCT, arguments);
+  this._distinctFields = [];
+  this._isDist = true;
+  processQueryFields.call(this, QueryType.DISTINCT, arguments);
   let clone = this._clone();
-  clone._distinctFields = [];
-  clone._isDist = true;
-  processQueryFields.call(clone, QueryType.DISTINCT, arguments);
   return clone;
 };
 
 
 QuerySet.prototype.order = function() {
   argsAreStringsOrThrow(QueryType.order, arguments);
-  let clone = this._clone();
-  clone._orderFields = [];
-  clone._orderDescending = [];
+  this._orderFields = [];
+  this._orderDescending = [];
   let args = [];
 
   for(let i = 0; i < arguments.length; i++) {
     let orderField = arguments[i];
     let isDescending = orderField.startsWith('-');
-    clone._orderDescending.push(isDescending);
+    this._orderDescending.push(isDescending);
 
     // need to remove the '-' (descend) option from args.
     args.push(isDescending ? orderField.slice(1) : orderField);
   }
-  processQueryFields.call(clone, QueryType.ORDER_BY, args);
-  return clone;
+  processQueryFields.call(this, QueryType.ORDER_BY, args);
+  return this._clone();
 };
 
 
 QuerySet.prototype.valuesList = function() {
   argsAreStringsOrThrow(QueryType.VALUES_LIST, arguments);
-  let clone = this._clone();
-  validateChainedQueries.call(clone, QueryType.VALUES_LIST);
-  clone._selectFields = [];
-  processQueryFields.call(clone, QueryType.VALUES_LIST, arguments);
-  return clone;
+  this._selectFields = [];
+  validateChainedQueries.call(this, QueryType.VALUES_LIST);
+  processQueryFields.call(this, QueryType.VALUES_LIST, arguments);
+  return this._clone();
 };
 
 
-function cloneQuerySetProp(prop) {
+function deepCopyProp(prop, allowFunctions = true) {
   if(prop === null || prop === undefined) return prop;
   
   switch(prop.constructor.name) {
@@ -818,10 +795,29 @@ function cloneQuerySetProp(prop) {
       return prop.clone();
 
     case Array.name:
-      return prop.slice();
+      const propArray = prop.slice();
+      for(let i = 0; i < propArray.length; i++) {
+        propArray[i] = deepCopyProp(propArray[i], false);
+      }
+      return propArray;
+
+    case Object.name:
+      const keys = Object.keys(prop);
+      const newObject = {};
+
+      for(let i = 0; i < keys.length; i++) {
+        const propName = keys[i];
+        newObject[propName] = deepCopyProp(prop[propName]);
+      }
+      return newObject;
+    
+    case Function.name:
+      if(!allowFunctions) {
+        throw Error(`function prop is not serializable`);
+      }
+      return prop;
 
     default:
-      if(typeof prop === 'function') return prop;
       return JSON.parse(JSON.stringify(prop));
   }
 }
@@ -835,7 +831,7 @@ QuerySet.prototype._clone = function() {
     const propName = keys[i];
 
     if(!clone.hasOwnProperty(propName)) continue;
-    clone[propName] = cloneQuerySetProp(clone[propName]);
+    clone[propName] = deepCopyProp(clone[propName]);
   }
 
   Object.setPrototypeOf(clone, QuerySet.prototype);

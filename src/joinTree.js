@@ -90,7 +90,7 @@ JoinTree.prototype.findOrCreateNode = function(node, field, joinType) {
   const modelName = field.options.model._meta.dbName;
   const nodeTree = node.tree;
 
-    // left join or inner join?
+  // left join or inner join?
   let link = nodeTree[modelName];
   if(!link) {
     return createJoinNode.call(this, nodeTree, modelName, field, joinType);
