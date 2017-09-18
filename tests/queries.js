@@ -131,6 +131,88 @@ describe('QuerySet', function() {
 
   }); /* valuesList */
 
+  describe('orderBy', function() {
+
+    before(function(done) {
+      // drop test db tables and recreate
+      createTestDB().then(result => {
+        // add data to the customers table
+        result.populateAllTables().then(done);
+      });
+    });
+
+    it('selects from customer table and desc orders id field', function() {
+      const Customer = getCustomerModel();
+
+      const proof = tables._data.customer.slice().sort((a, b) => {
+        return a.id < b.id;
+      });
+
+      const customer = Customer.orm.orderBy('-id');
+      return customer.req().then(r => {
+        expect(r).to.deep.eq(proof);
+      }); 
+    });
+
+    it('selects from customer table and desc orders last field', function() {
+      const Customer = getCustomerModel();
+
+      const proof = tables._data.customer.slice().sort((a, b) => {
+        return a.last < b.last;
+      });
+
+      const customer = Customer.orm.orderBy('-last');
+      return customer.req().then(r => {
+        expect(r).to.deep.eq(proof);
+      }); 
+    });
+
+    it('selects from order table and orders on desc customer last name', function() {
+      const { Customer, Order } = getRelatedModels();
+
+      let order = Order.orm.orderBy('-customer.last').req();
+
+      const proofQuerySQL = `
+        SELECT "order".* FROM "order"
+        JOIN customer ON customer.id = "order".customer_id
+        ORDER BY customer.last DESC
+      `;
+      let queryPromise = _query(proofQuerySQL);
+
+      return queryPromise.then(q => {
+        const proof = q.rows;
+        return order.then(r => {
+          expect(r).to.deep.eq(proof);
+        });
+      });
+
+    });
+
+    it('selects from item table and orders on customer last name', function() {
+      const { Item, OrderItem, Order, Customer } = getRelatedModels();
+
+      let items = Item.orm.orderBy('order_item.order.customer.last').req();
+
+      const proofQuerySQL = `
+        SELECT item.* FROM item
+        JOIN order_item oi ON oi.item_id = item.id
+        JOIN "order" ord ON ord.id = oi.order_id
+        JOIN customer ON customer.id = ord.customer_id
+        ORDER BY customer.last
+      `;
+      let queryPromise = _query(proofQuerySQL);
+
+      return queryPromise.then(q => {
+        const proof = q.rows;
+        return items.then(r => {
+          expect(r).to.deep.eq(proof);
+        });
+      });
+
+    });
+
+  });
+
   describe('filter', function() {
 
     before(function(done) {
@@ -314,4 +396,6 @@ describe('QuerySet', function() {
     });
 
   });
+
+
 });

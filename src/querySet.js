@@ -750,7 +750,7 @@ QuerySet.prototype.distinct = function() {
 };
 
 
-QuerySet.prototype.order = function() {
+QuerySet.prototype.orderBy = function() {
   argsAreStringsOrThrow(QueryType.order, arguments);
   this._orderFields = [];
   this._orderDescending = [];
