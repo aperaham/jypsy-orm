@@ -1,5 +1,13 @@
+/**
+ * JoinTree 
+ * 
+ * helper utilities for managing join query relationships
+ */
 
 
+/**
+ * this enum is used to determine the type of JOIN operation
+ */
 const JoinType = {
   LEFT: 'LEFT',
   INNER: 'INNER',
@@ -7,6 +15,17 @@ const JoinType = {
 };
 
 
+/**
+ * QueryField
+ * 
+ * a class that abstracts the utility of model fields common operations.
+ * @param {object} field
+ *   `field` should be an instance of a model's Field
+ *  
+ * @param {string} alias 
+ *   `alias` is the join table alias, as in the following sql example:
+ *   `JOIN customer AS cust1 ON cust1.purchase_id == purchased.id` ...
+ */
 function QueryField(field, alias) {
   if(!(this instanceof QueryField)) {
     return new QueryField(field, alias);
@@ -17,16 +36,66 @@ function QueryField(field, alias) {
 }
 
 
+/**
+ * nameToSQL
+ * 
+ * returns a field's name with alias for use to be referenced in a query
+ * @returns {string} of SQL
+ */
 QueryField.prototype.nameToSQL = function() {
   return `"${this._alias}"."${this._field.options.dbName}"`;
 };
 
 
+/**
+ * toJoinSQL
+ * 
+ * returns the join query text of the relation to this field. 
+ * this method finds related fields and follows its model's relations. example output:
+ * `JOIN "customer" AS "cust" ON  "cust"."id" = "related_table"."customer_id"`
+ * 
+ * @returns {string} of SQL
+ */
 QueryField.prototype.toJoinSQL = function(joinType, parentAlias) {
   return this._field.toJoinSQL(joinType, this._alias, parentAlias);
 };
 
 
+/**
+ * JoinTree
+ * 
+ * this class manages the tree of related fields and their query types
+ * that get referenced in a given QuerySet's query. 
+ * it caches the result of relations so that subsequent queries that follow the 
+ * same relations can reuse the fields. 
+ * 
+ * Example for the following join query:
+ *   `Customer.orm.filter({ purchases__items__category__name: "Hats" })`
+ * 
+ *   the QuerySet will generate joins which look like the following SQL:
+ *     `SELECT "customer".* from "customer"
+ *      LEFT JOIN "purchase" ON "purchase"."customer_id" = "customer"."id"
+ *      LEFT JOIN "item" ON "item"."purchase_id" = "purchase"."id"
+ *      LEFT JOIN "category" ON "category"."id" = "item"."category_id"
+ *      WHERE "category"."name" = "Hats"`
+ * 
+ *   and the resulting join tree will have the following nodes
+ *     *(root) -> purchase -> item -> category
+ *                                          | name
+ * 
+ * Now we can use the tree to "complete" other queries in the chain. For instance,
+ * if we took the original query and sorted by item price:
+ *    ```
+ *      Customer.orm.filter({ purchases__items__category__name: "Hats" })
+ *        .orderBy('purchases__items__price');
+ *    ```
+ *    
+ *    the query will walk the join tree and find the correct field ("price" field):
+ *      *(root) -> purchase -> item -> category
+ *                               | price     | name
+ *               
+ * @param {object} Model class (not an instance)
+ */
 function JoinTree(model) {
   if(!(this instanceof JoinTree)) {
     return new JoinTree();
@@ -61,6 +130,22 @@ JoinTree.prototype.getFirstNode = function() {
 };
 
 
+/**
+ * visitJoinTreeNodes
+ * 
+ * 
+ * a "private" method that generates an SQL JOIN statement 
+ * for every field in the join tree, using recursion. 
+ * 
+ * @param {object} tree
+ *   the join tree node to operate on.
+ *  
+ * @param {object} prevField
+ *   the previous field operated on. this is used to pass on any aliases.
+ * 
+ * @returns {string}
+ *   a string of SQL 
+ */
 function visitJoinTreeNodes(tree, prevField = null) {
   let results = '';
   const keys =  Object.keys(tree);
@@ -81,6 +166,14 @@ function visitJoinTreeNodes(tree, prevField = null) {
 }
 
 
+/**
+ * generateJoinSQL
+ * 
+ * generates a JOIN statement for every field in the jointree
+ * 
+ * @returns {string}
+ *   a string of SQL
+ */
 JoinTree.prototype.generateJoinSQL = function() {
   return visitJoinTreeNodes(this._joinMap.tree);
 };
@@ -106,6 +199,22 @@ JoinTree.prototype.findOrCreateNode = function(node, field, joinType) {
 };
 
 
+/**
+ * findField
+ * 
+ * queries the join tree for a field.
+ * 
+ * @param {Array} joins
+ *   a precomputed array of objects which represent the path of the joins. For example: 
+ *    
+ *   the following ORM query: `Customer.orm.valuesList('purchases__items__price')`
+ *   gets pre-processed to determine if `'purchases__items__price'` is a valid
+ *   join query. the following validated result is an Array of joins that looks
+ *   similar to this: ["purchases", "items", "price"]
+ * 
+ * @returns {object} 
+ *   an instance of a JoinTree QueryField
+ */
 JoinTree.prototype.findField = function(joins) {
   let node = this._joinMap.tree;
   let prevNode = null;
@@ -134,6 +243,19 @@ JoinTree.prototype.findField = function(joins) {
 };
 
 
+/**
+ * createJoinNodeType
+ * 
+ * a "private" method 
+ * used to create join tree nodes
+ * 
+ * @param {string} modelName 
+ * @param {object} field 
+ *   an instance of a Model Field
+ * 
+ * @returns {object}
+ *   a new join tree node
+ */
 function createJoinNodeType(modelName, field) {
   const models = this._joinMap.models;
   let alias;
