@@ -235,6 +235,17 @@ function getSelectFields(subQueryDepth = 0) {
 }
 
 
+function getDistinctFields() {
+
+  let distinctFields = this._distinctFields.map(i => {
+    const field = this._joinTree.findField(i);
+    return field.nameToSQL();
+  });
+  
+  return distinctFields.join(', ');
+}
+
+
 function getUpdateFields(values = []) {
   const paramIndex = values.length;
   const keys = Object.keys(this._updateFields);
@@ -522,12 +533,14 @@ function generateSelectSQL(values, subQueryDepth) {
   let selectFields = getSelectFields.call(this, subQueryDepth);
 
   if(this._isDist) {
-    // append the distinct fields
+    // when the `distinct` method has been called with 1 or more
+    // params, use `DISTINCT ON` specifying the distinct fields.
     if(this._distinctFields.length > 0) {
-      let distinct = this._distinctFields.join(', ');
-      selectFields = `DISTINCT ON (${distinct}) ${selectFields}`;
+      let distinctFields = getDistinctFields.call(this);
+      selectFields = `DISTINCT ON (${distinctFields}) ${selectFields}`;
     }
     else {
+      // use `DISTINCT` with `SELECT` fields.
       selectFields = `DISTINCT ${selectFields}`;
     } 
   }

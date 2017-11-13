@@ -331,7 +331,7 @@ describe('QuerySet', function() {
 
   describe('delete', function() {
 
-    before(function(done) {
+    beforeEach(function(done) {
       // drop test db tables and recreate
       createTestDB().then(result => {
         // add data to the customers table
@@ -390,12 +390,67 @@ describe('QuerySet', function() {
 
       // delete only customers that haven't made orders
       let noOrders = Customer.orm.filter({order__id: null}).delete();
-      noOrders.req().then(result => {
+      return noOrders.req().then(result => {
         expect(result).to.equal(2);
       });
     });
-
   });
 
+  describe('distinct', function() {
+    before(function(done) {
+      // drop test db tables and recreate
+      createTestDB().then(result => {
+        // add data to the customers table
+        result.populateAllTables().then(done);
+      });
+    });
 
+    it('join all distinct customers by order table', function() {
+      const { Customer, Order } = getRelatedModels();
+
+      const proofQuerySQL = `
+        SELECT DISTINCT ON ("order".customer_id) customer.* FROM customer
+        JOIN "order" ON "order".customer_id = customer.id
+        ORDER BY "order".customer_id;
+      `;
+
+      let proofData; 
+      let promise = _query(proofQuerySQL).then(result => {
+        proofData = result.rows;
+      });
+      
+      const qField = 'order.customer_id';
+      let customerQuery = Customer.orm.distinct(qField).orderBy(qField);
+
+      return promise = promise.then(() => customerQuery.req().then(result => {
+        let exp = expect(result).to.have.lengthOf(proofData.length)
+        exp = exp.and.to.deep.include.members(proofData);
+      }));
+    });
+
+    it('left join all distinct customers by order table', function() {
+      const { Customer, Order } = getRelatedModels();
+
+      const proofQuerySQL = `
+        SELECT DISTINCT ON ("order"."customer_id") customer.* FROM "order"
+        LEFT JOIN customer ON "order"."customer_id" = customer.id
+        ORDER BY "order"."customer_id";
+      `;
+
+      let proofData; 
+      let promise = _query(proofQuerySQL).then(result => {
+        proofData = result.rows;
+      });
+      
+      let customerQuery = Order.orm
+        .valuesList('customer__id', 'customer__first', 'customer__last')
+        .distinct('customer_id')
+        .orderBy('customer_id');
+
+      return promise = promise.then(() => customerQuery.req().then(result => {
+        let exp = expect(result).to.have.lengthOf(proofData.length)
+        exp = exp.and.to.deep.include.members(proofData);
+      }));
+    });
+  });
 });
